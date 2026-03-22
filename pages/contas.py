@@ -48,12 +48,12 @@ def render_contas() -> None:
 
 def _render_real() -> None:
     """Contas com dados reais do banco."""
-    from models.bill import get_all_bills, get_active_bills
+    from models.bill import get_active_bills
 
     hidden = is_balance_hidden()
 
     try:
-        bills = get_all_bills() if is_admin() else get_active_bills()
+        bills = get_active_bills()
     except Exception as e:
         st.warning(f"⚠️ Erro ao carregar contas: {e}")
         bills = []
