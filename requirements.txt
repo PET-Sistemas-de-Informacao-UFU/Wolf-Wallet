@@ -1,0 +1,27 @@
+# =============================================
+# 🐺 Wolf Wallet — Dependencies
+# =============================================
+# Pinned versions for reproducible builds.
+# Last updated: 2026-03-22
+
+# --- Core Framework ---
+streamlit>=1.30.0,<2.0.0
+
+# --- Data Processing ---
+pandas>=2.0.0,<3.0.0
+
+# --- Database ---
+psycopg2-binary>=2.9.0,<3.0.0
+sqlalchemy>=2.0.0,<3.0.0
+
+# --- Security ---
+bcrypt>=4.0.0,<5.0.0
+
+# --- Visualization ---
+plotly>=5.18.0,<6.0.0
+
+# --- HTTP / API ---
+requests>=2.31.0,<3.0.0
+
+# --- Environment ---
+python-dotenv>=1.0.0,<2.0.0

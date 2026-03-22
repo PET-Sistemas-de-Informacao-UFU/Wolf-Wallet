@@ -1,0 +1,51 @@
+# =============================================
+# 🐺 Wolf Wallet — .gitignore
+# =============================================
+
+# ---- Credenciais e Secrets ----
+.env
+.env.*
+.streamlit/secrets.toml
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ---- Virtual Environments ----
+venv/
+.venv/
+env/
+ENV/
+
+# ---- Dados temporários ----
+*.csv
+*.xlsx
+*.xls
+!mock/*.csv
+
+# ---- IDE ----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ---- Logs ----
+*.log
+
+# ---- Testes ----
+.pytest_cache/
+htmlcov/
+.coverage
