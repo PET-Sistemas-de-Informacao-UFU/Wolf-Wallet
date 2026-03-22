@@ -19,7 +19,7 @@ class App:
 
     NAME: str = "Wolf Wallet"
     EMOJI: str = "🐺"
-    TITLE: str = f"{EMOJI} {NAME}"
+    TITLE: str = f"{NAME}"
     VERSION: str = "1.0.0"
     DESCRIPTION: str = (
         "Carteira virtual do PET-SI — UFU. "

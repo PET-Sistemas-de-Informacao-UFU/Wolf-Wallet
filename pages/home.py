@@ -13,14 +13,15 @@ Usage:
 
 from __future__ import annotations
 
-from datetime import date
+from collections import defaultdict
+from datetime import date, datetime
 
 import streamlit as st
 
 from auth.session import is_balance_hidden, is_visitor, render_visitor_banner, require_auth
 from components.cards import render_dashboard_cards
 from components.charts import bar_chart_inflows_outflows
-from config.settings import App, Colors, UI
+from config.settings import App, Colors, Finance, UI
 from services.report_service import build_activity_feed, build_bill_alerts, format_currency
 
 
@@ -149,6 +150,10 @@ def _render_activity_feed(data: dict, hidden: bool) -> None:
 
     feed = build_activity_feed(transactions)
 
+    # Agrupa rendimento CDI (bruto + imposto) por dia em um único
+    # item "Rendimento Líquido", como aparece no app do banco.
+    feed = _consolidate_yield_entries(feed, transactions)
+
     for item in feed[:UI.RECENT_ACTIVITIES_LIMIT]:
         amount_display = item["amount_str"]
         if hidden:
@@ -213,3 +218,74 @@ def _render_bill_alerts(data: dict, hidden: bool) -> None:
             """,
             unsafe_allow_html=True,
         )
+
+
+def _consolidate_yield_entries(
+    feed: list[dict], transactions: list[dict]
+) -> list[dict]:
+    """
+    Agrupa rendimento CDI bruto + imposto do mesmo dia em um único
+    item 'Rendimento Líquido' com o valor líquido (bruto - imposto).
+
+    Isso reproduz o comportamento do app do banco, onde o usuário vê
+    apenas o rendimento final já descontado o IR.
+    """
+    threshold = float(Finance.YIELD_THRESHOLD)
+
+    # Identifica transações de CDI (yield + tax) e agrupa por data
+    daily_net: dict[str, float] = defaultdict(float)
+    daily_date_str: dict[str, str] = {}  # day_key -> "DD/MM"
+
+    for t in transactions:
+        t_type = t.get("transaction_type", "")
+        method = t.get("payment_method", "") or ""
+        amount = float(t.get("transaction_amount", 0))
+
+        if t_type == "SETTLEMENT" and method == "" and abs(amount) < threshold:
+            t_date = t.get("transaction_date")
+            if isinstance(t_date, datetime):
+                day_key = t_date.strftime("%Y-%m-%d")
+                date_label = t_date.strftime("%d/%m")
+            elif isinstance(t_date, str):
+                day_key = t_date[:10]
+                try:
+                    dt = datetime.fromisoformat(t_date)
+                    date_label = dt.strftime("%d/%m")
+                except ValueError:
+                    date_label = day_key[5:]
+            else:
+                continue
+            daily_net[day_key] += amount
+            daily_date_str[day_key] = date_label
+
+    # Reconstrói o feed: remove yield/tax individuais e insere líquidos por dia
+    result: list[dict] = []
+    inserted_dates: set[str] = set()
+
+    for item in feed:
+        cat = item.get("category", "")
+
+        if cat in ("yield", "tax"):
+            # Não adiciona o item individual (bruto ou imposto)
+            continue
+
+        result.append(item)
+
+    # Insere os rendimentos líquidos consolidados, ordenados por data desc
+    for day_key in sorted(daily_net.keys(), reverse=True):
+        net = daily_net[day_key]
+        if net == 0:
+            continue
+        result.append({
+            "icon": "📈",
+            "date_str": daily_date_str.get(day_key, ""),
+            "description": "Rendimento Líquido",
+            "amount_str": format_currency(net, show_sign=True),
+            "color": Colors.YIELD,
+            "category": "yield_net",
+        })
+
+    # Reordena por data (mais recente primeiro)
+    result.sort(key=lambda x: x.get("date_str", ""), reverse=True)
+
+    return result

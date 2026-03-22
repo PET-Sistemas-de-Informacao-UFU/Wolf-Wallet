@@ -127,7 +127,7 @@ def render_dashboard_cards(data: dict, hidden: bool = False) -> None:
 
     with col4:
         render_metric_card(
-            title="Rendimentos do Mês",
+            title="Rendimento Líquido",
             value=format_currency(data.get("yields", 0)),
             icon="📈",
             color=Colors.YIELD,

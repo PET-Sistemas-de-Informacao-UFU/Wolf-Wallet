@@ -105,6 +105,76 @@ def get_monthly_yields(year: int, month: int) -> Decimal:
     return Decimal(str(rows[0]["total"])) if rows else Decimal("0")
 
 
+def get_monthly_yield_breakdown(year: int, month: int) -> dict:
+    """
+    Breakdown dos rendimentos CDI de um mês: bruto, imposto, líquido.
+
+    - Bruto: SETTLEMENT, sem payment_method, valor positivo < threshold
+    - Imposto: SETTLEMENT, sem payment_method, valor negativo, ABS < threshold
+    - Líquido: bruto + imposto
+
+    Args:
+        year: Ano.
+        month: Mês (1-12).
+
+    Returns:
+        Dict com: gross, tax, net (todos Decimal).
+    """
+    rows = execute_query(
+        "SELECT "
+        "  COALESCE(SUM(CASE WHEN transaction_amount > 0 THEN transaction_amount ELSE 0 END), 0) as gross, "
+        "  COALESCE(SUM(CASE WHEN transaction_amount < 0 THEN transaction_amount ELSE 0 END), 0) as tax, "
+        "  COALESCE(SUM(settlement_net_amount), 0) as net "
+        "FROM transactions "
+        "WHERE transaction_type = 'SETTLEMENT' "
+        "AND (payment_method IS NULL OR payment_method = '') "
+        "AND ABS(transaction_amount) < :threshold "
+        "AND EXTRACT(YEAR FROM transaction_date) = :year "
+        "AND EXTRACT(MONTH FROM transaction_date) = :month",
+        {"threshold": float(Finance.YIELD_THRESHOLD), "year": year, "month": month},
+    )
+
+    if rows:
+        return {
+            "gross": Decimal(str(rows[0]["gross"])),
+            "tax": Decimal(str(rows[0]["tax"])),
+            "net": Decimal(str(rows[0]["net"])),
+        }
+
+    return {"gross": Decimal("0"), "tax": Decimal("0"), "net": Decimal("0")}
+
+
+def get_yield_history(months: int = 12) -> pd.DataFrame:
+    """
+    Histórico de rendimentos agrupados por mês (bruto, imposto, líquido).
+
+    Args:
+        months: Quantidade de meses para trás.
+
+    Returns:
+        DataFrame com colunas: month, gross, tax, net_yield.
+    """
+    rows = execute_query(
+        "SELECT "
+        "  TO_CHAR(transaction_date, 'YYYY-MM') as month, "
+        "  COALESCE(SUM(CASE WHEN transaction_amount > 0 THEN transaction_amount ELSE 0 END), 0) as gross, "
+        "  COALESCE(SUM(CASE WHEN transaction_amount < 0 THEN ABS(transaction_amount) ELSE 0 END), 0) as tax, "
+        "  COALESCE(SUM(settlement_net_amount), 0) as net_yield "
+        "FROM transactions "
+        "WHERE transaction_type = 'SETTLEMENT' "
+        "AND (payment_method IS NULL OR payment_method = '') "
+        "AND ABS(transaction_amount) < :threshold "
+        "GROUP BY TO_CHAR(transaction_date, 'YYYY-MM') "
+        "ORDER BY month",
+        {"threshold": float(Finance.YIELD_THRESHOLD)},
+    )
+
+    if not rows:
+        return pd.DataFrame(columns=["month", "gross", "tax", "net_yield"])
+
+    return pd.DataFrame(rows)
+
+
 def get_monthly_summary(year: int, month: int) -> dict:
     """
     Resumo financeiro de um mês.
