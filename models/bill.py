@@ -18,6 +18,21 @@ from config.settings import UI
 logger = logging.getLogger(__name__)
 
 
+def get_all_bills() -> list[dict]:
+    """
+    Retorna todas as contas (ativas e inativas). Uso admin.
+
+    Returns:
+        Lista de contas com todos os campos.
+    """
+    return execute_query(
+        "SELECT id, name, description, amount, due_day, recurrence, "
+        "start_date, end_date, is_active, created_by, created_at "
+        "FROM monthly_bills "
+        "ORDER BY is_active DESC, due_day"
+    )
+
+
 def get_active_bills() -> list[dict]:
     """
     Retorna todas as contas ativas.

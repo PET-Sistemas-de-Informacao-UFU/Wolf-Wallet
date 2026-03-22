@@ -61,7 +61,9 @@ def _render_real() -> None:
     if not bills:
         st.info("Nenhuma conta cadastrada.")
         if is_admin():
-            st.caption("Use o botão abaixo para adicionar a primeira conta.")
+            st.caption("Use o formulário abaixo para adicionar a primeira conta.")
+            st.divider()
+            _render_admin_form()
         return
 
     # Cards resumo
@@ -72,8 +74,9 @@ def _render_real() -> None:
     # Lista de contas
     _render_bill_list(bills, hidden)
 
-    # Admin: formulário de cadastro
+    # Admin: ações de gerenciamento
     if is_admin():
+        _render_admin_actions(bills)
         st.divider()
         _render_admin_form()
 
@@ -254,6 +257,39 @@ def _render_bill_list(bills: list[dict], hidden: bool) -> None:
         )
 
 
+def _render_admin_actions(bills: list[dict]) -> None:
+    """Ações de admin: desativar contas."""
+    st.divider()
+    st.markdown("##### ⚙️ Gerenciar Contas")
+
+    active_bills = [b for b in bills if b.get("is_active", True)]
+    if not active_bills:
+        return
+
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        bill_options = {f"{b['name']} (dia {b['due_day']})": b["id"] for b in active_bills}
+        selected = st.selectbox(
+            "Selecionar conta",
+            options=list(bill_options.keys()),
+            key="admin_bill_select",
+        )
+    with col2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("🗑️ Desativar", key="deactivate_bill", type="secondary"):
+            if selected:
+                try:
+                    from models.bill import deactivate_bill
+                    bill_id = bill_options[selected]
+                    if deactivate_bill(bill_id):
+                        st.success(f"✅ Conta desativada!")
+                        st.rerun()
+                    else:
+                        st.warning("Conta já estava desativada.")
+                except Exception as e:
+                    st.error(f"Erro: {e}")
+
+
 def _render_admin_form() -> None:
     """Formulário de cadastro de nova conta (admin)."""
     st.markdown("##### ➕ Cadastrar Nova Conta")
@@ -279,16 +315,22 @@ def _render_admin_form() -> None:
                 return
 
             try:
+                from auth.session import get_current_user
                 from models.bill import create_bill
 
-                bill_id = create_bill(
+                user = get_current_user()
+                user_id = user["id"] if user else 1
+
+                result = create_bill(
                     name=name,
                     amount=amount,
                     due_day=due_day,
+                    start_date=date.today(),
+                    created_by=user_id,
                     recurrence=recurrence,
                     description=description or None,
                 )
-                st.success(f"✅ Conta '{name}' cadastrada! (ID: {bill_id})")
+                st.success(f"✅ Conta '{name}' cadastrada!")
                 st.rerun()
             except Exception as e:
                 st.error(f"Erro ao cadastrar: {e}")
