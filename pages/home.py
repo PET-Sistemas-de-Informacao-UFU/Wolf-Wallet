@@ -260,7 +260,6 @@ def _consolidate_yield_entries(
 
     # Reconstrói o feed: remove yield/tax individuais e insere líquidos por dia
     result: list[dict] = []
-    inserted_dates: set[str] = set()
 
     for item in feed:
         cat = item.get("category", "")
@@ -283,9 +282,10 @@ def _consolidate_yield_entries(
             "amount_str": format_currency(net, show_sign=True),
             "color": Colors.YIELD,
             "category": "yield_net",
+            "sort_key": day_key,
         })
 
-    # Reordena por data (mais recente primeiro)
-    result.sort(key=lambda x: x.get("date_str", ""), reverse=True)
+    # Reordena por sort_key (YYYY-MM-DD) em vez de date_str (DD/MM)
+    result.sort(key=lambda x: x.get("sort_key", "0000-00-00"), reverse=True)
 
     return result

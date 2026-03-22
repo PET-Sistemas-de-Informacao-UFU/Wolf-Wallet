@@ -49,7 +49,7 @@ def render_transaction_filters(key_prefix: str = "extrato") -> dict:
                 key=f"{key_prefix}_direction",
             )
 
-        col4, col5 = st.columns(2)
+        col4, col5, col6 = st.columns(3)
 
         with col4:
             transaction_type = st.selectbox(
@@ -59,8 +59,15 @@ def render_transaction_filters(key_prefix: str = "extrato") -> dict:
             )
 
         with col5:
+            payment_method = st.selectbox(
+                "Método",
+                options=["Todos", "pix", "account_money", "available_money", "(vazio)"],
+                key=f"{key_prefix}_method",
+            )
+
+        with col6:
             search = st.text_input(
-                "Buscar (source_id ou referência)",
+                "Buscar (source_id ou ref.)",
                 value="",
                 key=f"{key_prefix}_search",
                 placeholder="Ex: 1274390661073",
@@ -69,11 +76,13 @@ def render_transaction_filters(key_prefix: str = "extrato") -> dict:
     # Mapeia para valores do model
     direction_map = {"Todas": None, "Entradas": "inflows", "Saídas": "outflows"}
     type_map = {"Todos": None}
+    method_map = {"Todos": None, "(vazio)": ""}
 
     return {
         "start_date": start_date,
         "end_date": end_date,
         "transaction_type": type_map.get(transaction_type, transaction_type),
+        "payment_method": method_map.get(payment_method, payment_method),
         "direction": direction_map.get(direction),
         "search": search.strip() or None,
     }

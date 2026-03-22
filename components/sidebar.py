@@ -133,7 +133,7 @@ def _render_navigation() -> str:
 
 
 def _render_controls() -> None:
-    """Renderiza controles globais: ocultar saldo."""
+    """Renderiza controles globais: ocultar saldo + alterar senha."""
     hidden = is_balance_hidden()
     icon = "👁️" if not hidden else "👁️‍🗨️"
     label = "Mostrar saldo" if hidden else "Ocultar saldo"
@@ -141,6 +141,58 @@ def _render_controls() -> None:
     if st.button(f"{icon} {label}", use_container_width=True, key="toggle_balance"):
         toggle_hide_balance()
         st.rerun()
+
+    # Alterar senha (somente para usuários logados, não visitantes)
+    if not is_visitor() and get_current_user():
+        _render_change_password()
+
+
+def _render_change_password() -> None:
+    """Formulário de alteração de senha no sidebar."""
+    with st.expander("🔑 Alterar Senha", expanded=False):
+        current_pw = st.text_input(
+            "Senha atual", type="password", key="sidebar_current_pw"
+        )
+        new_pw = st.text_input(
+            "Nova senha", type="password", key="sidebar_new_pw"
+        )
+        confirm_pw = st.text_input(
+            "Confirmar nova senha", type="password", key="sidebar_confirm_pw"
+        )
+
+        if st.button("💾 Salvar", key="sidebar_save_pw", use_container_width=True):
+            if not current_pw or not new_pw or not confirm_pw:
+                st.error("Preencha todos os campos.")
+                return
+
+            if new_pw != confirm_pw:
+                st.error("As senhas não coincidem.")
+                return
+
+            from auth.password import (
+                hash_password,
+                validate_password_strength,
+                verify_password,
+            )
+            from models.user import get_user_by_id, update_user
+
+            user = get_current_user()
+            db_user = get_user_by_id(user["id"])
+
+            if not db_user or not verify_password(current_pw, db_user["password_hash"]):
+                st.error("Senha atual incorreta.")
+                return
+
+            errors = validate_password_strength(new_pw)
+            if errors:
+                for err in errors:
+                    st.error(err)
+                return
+
+            if update_user(user["id"], password_hash=hash_password(new_pw)):
+                st.success("✅ Senha alterada!")
+            else:
+                st.error("Erro ao salvar.")
 
 
 def _render_logout() -> None:

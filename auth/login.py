@@ -152,8 +152,7 @@ def _handle_login(email: str, password: str) -> None:
 
 def _handle_forgot_password(email: str) -> None:
     """
-    Placeholder para o fluxo de redefinição de senha.
-    Será implementado completamente na Fase 8 (com envio de email).
+    Fluxo de redefinição de senha: gera senha temporária e envia por email.
 
     Args:
         email: Email digitado no formulário.
@@ -162,11 +161,50 @@ def _handle_forgot_password(email: str) -> None:
         st.warning("Digite seu email no campo acima e clique em 'Esqueci minha senha'.")
         return
 
-    st.info(
-        f"📧 Se o email **{email}** estiver cadastrado, "
-        "você receberá um link de redefinição.\n\n"
-        "*(Funcionalidade completa será ativada em breve)*"
-    )
+    email = email.strip().lower()
+
+    try:
+        from models.user import get_user_by_email, update_user
+        from auth.password import generate_temp_password, hash_password
+        from services.email_service import send_password_reset_email, is_email_configured
+
+        user = get_user_by_email(email)
+
+        if not user or not user.get("is_active"):
+            # Mensagem genérica por segurança (não revela se email existe)
+            time.sleep(Auth.FAILED_LOGIN_DELAY)
+            st.info(
+                f"📧 Se o email **{email}** estiver cadastrado, "
+                "uma nova senha será enviada."
+            )
+            return
+
+        temp_password = generate_temp_password()
+        update_user(user["id"], password_hash=hash_password(temp_password))
+
+        if is_email_configured():
+            sent = send_password_reset_email(user["name"], email, temp_password)
+            if sent:
+                st.success(
+                    f"📧 Nova senha enviada para **{email}**. "
+                    "Verifique sua caixa de entrada."
+                )
+            else:
+                st.warning(
+                    "⚠️ Senha redefinida mas o email não pôde ser enviado. "
+                    "Contacte um administrador."
+                )
+        else:
+            st.info(
+                f"📧 Se o email **{email}** estiver cadastrado, "
+                "uma nova senha será enviada."
+            )
+
+    except Exception:
+        st.info(
+            f"📧 Se o email **{email}** estiver cadastrado, "
+            "uma nova senha será enviada."
+        )
 
 
 def _render_visitor_button() -> None:

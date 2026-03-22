@@ -182,17 +182,31 @@ def _summary_card(title: str, value: str, icon: str, color: str) -> str:
 
 
 def _render_bill_list(bills: list[dict], hidden: bool) -> None:
-    """Renderiza a lista de contas com status de vencimento."""
+    """Renderiza a lista de contas com status de vencimento e pagamento."""
     st.markdown("##### 📋 Contas Cadastradas")
 
     today = date.today()
 
+    # Busca status de pagamento do mês atual
+    payment_status: dict[int, bool] = {}
+    if not is_visitor():
+        try:
+            from models.bill import get_bill_payment_status
+            ref_month = today.replace(day=1)
+            for bill in bills:
+                status = get_bill_payment_status(bill["id"], ref_month)
+                payment_status[bill["id"]] = status.get("paid", False) if status else False
+        except Exception:
+            pass
+
     for bill in bills:
+        bill_id = bill.get("id", 0)
         name = bill.get("name", "Conta")
         description = bill.get("description", "")
         amount = float(bill.get("amount", 0))
         due_day = bill.get("due_day", 0)
         recurrence = bill.get("recurrence", "monthly")
+        is_paid = payment_status.get(bill_id, False)
 
         # Calcula dias até vencimento
         try:
@@ -207,7 +221,11 @@ def _render_bill_list(bills: list[dict], hidden: bool) -> None:
             days_until = 99
 
         # Status visual
-        if days_until == 0:
+        if is_paid:
+            status_icon = "✅"
+            status_text = "Pago"
+            status_color = Colors.POSITIVE
+        elif days_until == 0:
             status_icon = "🔴"
             status_text = "Vence hoje!"
             status_color = Colors.NEGATIVE
@@ -225,36 +243,51 @@ def _render_bill_list(bills: list[dict], hidden: bool) -> None:
             status_color = "#888"
 
         amount_display = mask_value(format_currency(amount)) if hidden else format_currency(amount)
-
         recurrence_label = "🔄 Mensal" if recurrence == "monthly" else "📌 Temporário"
+        paid_badge = " <span style='color: #4ecca3; font-size: 0.75rem; margin-left: 0.5rem;'>✅ PAGO</span>" if is_paid else ""
 
-        st.markdown(
-            f"""
-            <div style="
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: 0.8rem 1rem;
-                margin: 0.4rem 0;
-                border-radius: 10px;
-                background: rgba(255,255,255,0.03);
-                border-left: 3px solid {status_color};
-            ">
-                <div>
-                    <span style="font-size: 1rem; font-weight: 600;">{name}</span>
-                    <span style="color: #888; font-size: 0.8rem; margin-left: 0.5rem;">{recurrence_label}</span>
-                    <br>
-                    <span style="color: #888; font-size: 0.82rem;">{description}</span>
+        col_card, col_btn = st.columns([5, 1])
+
+        with col_card:
+            st.markdown(
+                f"""
+                <div style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 0.8rem 1rem;
+                    margin: 0.2rem 0;
+                    border-radius: 10px;
+                    background: rgba(255,255,255,0.03);
+                    border-left: 3px solid {status_color};
+                ">
+                    <div>
+                        <span style="font-size: 1rem; font-weight: 600;">{name}</span>
+                        <span style="color: #888; font-size: 0.8rem; margin-left: 0.5rem;">{recurrence_label}</span>{paid_badge}
+                        <br>
+                        <span style="color: #888; font-size: 0.82rem;">{description}</span>
+                    </div>
+                    <div style="text-align: right;">
+                        <span style="font-size: 1.1rem; font-weight: 700; color: {Colors.NEUTRAL};">{amount_display}</span>
+                        <br>
+                        <span style="font-size: 0.82rem; color: {status_color};">{status_icon} {status_text}</span>
+                    </div>
                 </div>
-                <div style="text-align: right;">
-                    <span style="font-size: 1.1rem; font-weight: 700; color: {Colors.NEUTRAL};">{amount_display}</span>
-                    <br>
-                    <span style="font-size: 0.82rem; color: {status_color};">{status_icon} {status_text}</span>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+                """,
+                unsafe_allow_html=True,
+            )
+
+        with col_btn:
+            if is_admin() and not is_paid and not is_visitor():
+                if st.button("💸", key=f"pay_{bill_id}", help="Marcar como pago"):
+                    try:
+                        from auth.session import get_current_user
+                        from models.bill import mark_bill_paid
+                        user = get_current_user()
+                        mark_bill_paid(bill_id, today.replace(day=1), user["id"] if user else 1)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro: {e}")
 
 
 def _render_admin_actions(bills: list[dict]) -> None:
@@ -300,10 +333,12 @@ def _render_admin_form() -> None:
         with col1:
             name = st.text_input("Nome da conta *", placeholder="Ex: Servidor Cloud")
             amount = st.number_input("Valor (R$) *", min_value=0.01, step=0.01, format="%.2f")
+            start_date_input = st.date_input("Data início", value=date.today())
 
         with col2:
             due_day = st.number_input("Dia de vencimento *", min_value=1, max_value=31, value=10)
             recurrence = st.selectbox("Recorrência", ["monthly", "temporary"])
+            end_date_input = st.date_input("Data fim (só temporário)", value=None)
 
         description = st.text_input("Descrição (opcional)", placeholder="Detalhes da conta")
 
@@ -325,10 +360,11 @@ def _render_admin_form() -> None:
                     name=name,
                     amount=amount,
                     due_day=due_day,
-                    start_date=date.today(),
+                    start_date=start_date_input,
                     created_by=user_id,
                     recurrence=recurrence,
                     description=description or None,
+                    end_date=end_date_input if recurrence == "temporary" else None,
                 )
                 st.success(f"✅ Conta '{name}' cadastrada!")
                 st.rerun()

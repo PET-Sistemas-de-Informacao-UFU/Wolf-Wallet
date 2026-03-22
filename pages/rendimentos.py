@@ -63,8 +63,11 @@ def _render_real() -> None:
     # Histórico completo
     history_df = get_yield_history(months=24)
 
-    # --- Cards do mês atual ---
-    _render_yield_cards(current, hidden)
+    # Total acumulado (all-time)
+    all_time_net = float(history_df["net_yield"].astype(float).sum()) if not history_df.empty else 0.0
+
+    # --- Cards do mês atual + total acumulado ---
+    _render_yield_cards(current, hidden, all_time_net=all_time_net)
 
     st.divider()
 
@@ -169,8 +172,8 @@ def _render_visitor() -> None:
         st.info(Messages.NO_DATA)
 
 
-def _render_yield_cards(data: dict, hidden: bool = False) -> None:
-    """Renderiza os 3 cards de rendimento: bruto, imposto, líquido."""
+def _render_yield_cards(data: dict, hidden: bool = False, all_time_net: float | None = None) -> None:
+    """Renderiza os cards de rendimento: bruto, imposto, líquido, total acumulado."""
     gross = float(data.get("gross", 0))
     tax = float(data.get("tax", 0))
     net = float(data.get("net", 0))
@@ -178,9 +181,9 @@ def _render_yield_cards(data: dict, hidden: bool = False) -> None:
     # Taxa efetiva de imposto
     tax_rate = (abs(tax) / gross * 100) if gross > 0 else 0
 
-    col1, col2, col3 = st.columns(3)
+    cols = st.columns(4 if all_time_net is not None else 3)
 
-    with col1:
+    with cols[0]:
         st.markdown(
             _card_html(
                 "Rendimento Bruto",
@@ -191,7 +194,7 @@ def _render_yield_cards(data: dict, hidden: bool = False) -> None:
             unsafe_allow_html=True,
         )
 
-    with col2:
+    with cols[1]:
         tax_label = f"Imposto ({tax_rate:.1f}%)" if tax_rate > 0 else "Imposto"
         st.markdown(
             _card_html(
@@ -203,7 +206,7 @@ def _render_yield_cards(data: dict, hidden: bool = False) -> None:
             unsafe_allow_html=True,
         )
 
-    with col3:
+    with cols[2]:
         st.markdown(
             _card_html(
                 "Rendimento Líquido",
@@ -213,6 +216,18 @@ def _render_yield_cards(data: dict, hidden: bool = False) -> None:
             ),
             unsafe_allow_html=True,
         )
+
+    if all_time_net is not None and len(cols) > 3:
+        with cols[3]:
+            st.markdown(
+                _card_html(
+                    "Total Acumulado",
+                    mask_value(format_currency(all_time_net)) if hidden else format_currency(all_time_net),
+                    "🏆",
+                    Colors.POSITIVE,
+                ),
+                unsafe_allow_html=True,
+            )
 
     st.caption(f"📅 Mês atual: {date.today().strftime('%B %Y').capitalize()}")
 

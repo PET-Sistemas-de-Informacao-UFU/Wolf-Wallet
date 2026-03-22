@@ -130,7 +130,8 @@ def _render_user_row(user: dict) -> None:
             with btn_cols[1]:
                 if is_active:
                     if st.button("🚫", key=f"deact_{user_id}", help="Desativar"):
-                        _deactivate_user(user_id, name)
+                        st.session_state[f"confirm_deact_{user_id}"] = True
+                        st.rerun()
                 else:
                     if st.button("✅", key=f"react_{user_id}", help="Reativar"):
                         _reactivate_user(user_id, name)
@@ -139,7 +140,33 @@ def _render_user_row(user: dict) -> None:
             with btn_cols[2]:
                 if is_active:
                     if st.button("🔑", key=f"reset_{user_id}", help="Resetar senha"):
-                        _reset_password(user_id, name, email)
+                        st.session_state[f"confirm_reset_{user_id}"] = True
+                        st.rerun()
+
+    # Confirmações fora do layout de colunas
+    if st.session_state.get(f"confirm_deact_{user_id}"):
+        st.warning(f"⚠️ Desativar **{name}**? O usuário não poderá mais acessar o sistema.")
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("✅ Confirmar", key=f"yes_deact_{user_id}", type="primary"):
+                st.session_state.pop(f"confirm_deact_{user_id}", None)
+                _deactivate_user(user_id, name)
+        with c2:
+            if st.button("❌ Cancelar", key=f"no_deact_{user_id}"):
+                st.session_state.pop(f"confirm_deact_{user_id}", None)
+                st.rerun()
+
+    if st.session_state.get(f"confirm_reset_{user_id}"):
+        st.warning(f"⚠️ Resetar a senha de **{name}**? Uma nova senha temporária será gerada.")
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("✅ Confirmar", key=f"yes_reset_{user_id}", type="primary"):
+                st.session_state.pop(f"confirm_reset_{user_id}", None)
+                _reset_password(user_id, name, email)
+        with c2:
+            if st.button("❌ Cancelar", key=f"no_reset_{user_id}"):
+                st.session_state.pop(f"confirm_reset_{user_id}", None)
+                st.rerun()
 
     # Formulário de edição (expandido se clicou em editar)
     if st.session_state.get(f"editing_user_{user_id}"):

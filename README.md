@@ -143,22 +143,16 @@ wolf-wallet/
 ## 📅 Roadmap
 
 - [x] **Fase 0** — Fundação (estrutura, banco, config)
-- [ ] **Fase 1** — Autenticação e navegação
-- [ ] **Fase 2** — Dashboard e transações
-- [ ] **Fase 3** — Integração Mercado Pago
-- [ ] **Fase 4** — Extrato detalhado
-- [ ] **Fase 5** — Rendimentos
-- [ ] **Fase 6** — Contas mensais
-- [ ] **Fase 7** — Gestão de usuários e email
-- [ ] **Fase 8** — Modo visitante (dados mockados)
+- [x] **Fase 1** — Autenticação e navegação
+- [x] **Fase 2** — Dashboard e transações
+- [x] **Fase 3** — Integração Mercado Pago
+- [x] **Fase 4** — Extrato detalhado
+- [x] **Fase 5** — Rendimentos
+- [x] **Fase 6** — Contas mensais
+- [x] **Fase 7** — Gestão de usuários e email
+- [x] **Fase 8** — Modo visitante (dados mockados)
 - [ ] **Fase 9** — Polimento UX
 - [ ] **Fase 10** — Deploy
-
----
-
-## 📝 Licença
-
-Projeto interno do PET-SI — UFU. Repositório inicialmente privado, será tornado público futuramente.
 
 ---
 

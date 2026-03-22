@@ -166,14 +166,18 @@ def build_activity_feed(transactions: list[dict]) -> list[dict]:
         # Formata a data
         if isinstance(t_date, datetime):
             date_str = t_date.strftime("%d/%m")
+            sort_key = t_date.strftime("%Y-%m-%d")
         elif isinstance(t_date, str):
             try:
                 dt = datetime.fromisoformat(t_date)
                 date_str = dt.strftime("%d/%m")
+                sort_key = dt.strftime("%Y-%m-%d")
             except ValueError:
                 date_str = t_date[:10]
+                sort_key = t_date[:10]
         else:
             date_str = "—"
+            sort_key = "0000-00-00"
 
         feed.append({
             "icon": classification["icon"],
@@ -182,6 +186,7 @@ def build_activity_feed(transactions: list[dict]) -> list[dict]:
             "amount_str": format_currency(amount, show_sign=True),
             "color": classification["color"],
             "category": classification["category"],
+            "sort_key": sort_key,
         })
 
     return feed

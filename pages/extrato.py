@@ -56,6 +56,7 @@ def _render_real_extrato() -> None:
         start_date=filters["start_date"],
         end_date=filters["end_date"],
         transaction_type=filters["transaction_type"],
+        payment_method=filters.get("payment_method"),
         direction=filters["direction"],
         search=filters["search"],
         page=page,
@@ -143,42 +144,42 @@ def _filter_mock_transactions(transactions: list[dict], filters: dict) -> list[d
 
 
 def _render_csv_export(filters: dict) -> None:
-    """Botão para exportar transações filtradas como CSV."""
+    """Botão direto para exportar transações filtradas como CSV."""
     st.markdown("##### 📥 Exportar Dados")
 
-    if st.button("⬇️ Baixar CSV", key="export_csv", type="secondary"):
-        try:
-            from models.transaction import get_transactions
+    try:
+        from models.transaction import get_transactions
 
-            # Busca TODAS as transações (sem paginação)
-            all_txns, total = get_transactions(
-                start_date=filters["start_date"],
-                end_date=filters["end_date"],
-                transaction_type=filters["transaction_type"],
-                direction=filters["direction"],
-                search=filters["search"],
-                page=1,
-                per_page=999999,
-            )
+        # Busca TODAS as transações (sem paginação)
+        all_txns, total = get_transactions(
+            start_date=filters["start_date"],
+            end_date=filters["end_date"],
+            transaction_type=filters["transaction_type"],
+            payment_method=filters.get("payment_method"),
+            direction=filters["direction"],
+            search=filters["search"],
+            page=1,
+            per_page=999999,
+        )
 
-            if not all_txns:
-                st.warning("Nenhuma transação para exportar.")
-                return
+        if not all_txns:
+            st.caption("Nenhuma transação para exportar.")
+            return
 
-            df = _transactions_to_dataframe(all_txns)
-            csv_buffer = io.StringIO()
-            df.to_csv(csv_buffer, index=False, sep=";", encoding="utf-8")
+        df = _transactions_to_dataframe(all_txns)
+        csv_buffer = io.StringIO()
+        df.to_csv(csv_buffer, index=False, sep=";", encoding="utf-8")
 
-            st.download_button(
-                label=f"📄 Baixar {total} transações (CSV)",
-                data=csv_buffer.getvalue(),
-                file_name=f"wolf-wallet-extrato-{datetime.now().strftime('%Y%m%d')}.csv",
-                mime="text/csv",
-                key="download_csv",
-            )
+        st.download_button(
+            label=f"📄 Baixar {total} transações (CSV)",
+            data=csv_buffer.getvalue(),
+            file_name=f"wolf-wallet-extrato-{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+            key="download_csv",
+        )
 
-        except Exception as e:
-            st.error(f"Erro ao exportar: {e}")
+    except Exception as e:
+        st.error(f"Erro ao exportar: {e}")
 
 
 def _transactions_to_dataframe(transactions: list[dict]) -> pd.DataFrame:
