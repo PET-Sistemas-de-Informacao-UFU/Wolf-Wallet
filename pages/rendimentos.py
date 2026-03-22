@@ -87,36 +87,15 @@ def _render_real() -> None:
 
 
 def _render_visitor() -> None:
-    """Rendimentos com dados mock."""
+    """Rendimentos com dados mock — gráfico e tabela completos."""
     render_visitor_banner()
 
-    from mock.mock_data import get_mock_dashboard_data
+    from mock.mock_data import get_mock_transactions
 
-    mock = get_mock_dashboard_data()
-    transactions = mock.get("transactions", [])
+    transactions = get_mock_transactions()
 
-    # Simula breakdown a partir dos mock
     from config.settings import Finance
     threshold = float(Finance.YIELD_THRESHOLD)
-
-    gross = sum(
-        float(t["transaction_amount"])
-        for t in transactions
-        if t.get("transaction_type") == "SETTLEMENT"
-        and not t.get("payment_method")
-        and float(t.get("transaction_amount", 0)) > 0
-        and abs(float(t.get("transaction_amount", 0))) < threshold
-    )
-    tax = sum(
-        float(t["transaction_amount"])
-        for t in transactions
-        if t.get("transaction_type") == "SETTLEMENT"
-        and not t.get("payment_method")
-        and float(t.get("transaction_amount", 0)) < 0
-        and abs(float(t.get("transaction_amount", 0))) < threshold
-    )
-
-    current = {"gross": gross, "tax": tax, "net": gross + tax}
 
     hidden = False
     try:
@@ -125,10 +104,69 @@ def _render_visitor() -> None:
     except Exception:
         pass
 
+    # Breakdown do mês atual
+    today = date.today()
+    current_txns = [
+        t for t in transactions
+        if t["transaction_date"].month == today.month
+        and t["transaction_date"].year == today.year
+        and t["transaction_type"] == "SETTLEMENT"
+        and not t.get("payment_method")
+        and abs(float(t["transaction_amount"])) < threshold
+    ]
+
+    gross = sum(float(t["transaction_amount"]) for t in current_txns if float(t["transaction_amount"]) > 0)
+    tax = sum(float(t["transaction_amount"]) for t in current_txns if float(t["transaction_amount"]) < 0)
+    current = {"gross": gross, "tax": tax, "net": gross + tax}
+
     _render_yield_cards(current, hidden)
 
     st.divider()
-    st.info("📊 Gráfico de evolução disponível com dados reais (faça login).")
+
+    # Gera histórico mock por mês (igual get_yield_history mas em memória)
+    import pandas as pd
+    from collections import defaultdict
+
+    monthly_gross: dict[str, float] = defaultdict(float)
+    monthly_tax: dict[str, float] = defaultdict(float)
+    monthly_net: dict[str, float] = defaultdict(float)
+
+    for t in transactions:
+        if (t["transaction_type"] == "SETTLEMENT"
+                and not t.get("payment_method")
+                and abs(float(t["transaction_amount"])) < threshold):
+            month_key = t["transaction_date"].strftime("%Y-%m")
+            amount = float(t["transaction_amount"])
+            if amount > 0:
+                monthly_gross[month_key] += amount
+            else:
+                monthly_tax[month_key] += abs(amount)
+            monthly_net[month_key] += amount
+
+    if monthly_gross:
+        rows = []
+        for m in sorted(monthly_gross.keys()):
+            rows.append({
+                "month": m,
+                "gross": round(monthly_gross[m], 2),
+                "tax": round(monthly_tax[m], 2),
+                "net_yield": round(monthly_net[m], 2),
+            })
+        history_df = pd.DataFrame(rows)
+
+        # Filtro de meses
+        filtered_df = _render_month_filter(history_df)
+
+        st.markdown("##### 📊 Evolução Mensal")
+        fig = _yield_chart(filtered_df)
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.divider()
+
+        st.markdown("##### 📋 Histórico Detalhado")
+        _render_yield_table(filtered_df, hidden)
+    else:
+        st.info(Messages.NO_DATA)
 
 
 def _render_yield_cards(data: dict, hidden: bool = False) -> None:

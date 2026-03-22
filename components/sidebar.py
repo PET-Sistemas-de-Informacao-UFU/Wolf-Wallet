@@ -100,15 +100,10 @@ def _render_navigation() -> str:
     # Páginas acessíveis por todos (logados + visitantes)
     nav_items: dict[str, str] = {
         f"{UI.ICONS['dashboard']} Dashboard": Pages.HOME,
+        f"{UI.ICONS['extrato']} Extrato": Pages.EXTRATO,
+        f"{UI.ICONS['rendimentos']} Rendimentos": Pages.RENDIMENTOS,
+        f"{UI.ICONS['contas']} Contas Mensais": Pages.CONTAS,
     }
-
-    # Páginas que requerem login (não aparecem para visitantes)
-    if not is_visitor():
-        nav_items.update({
-            f"{UI.ICONS['extrato']} Extrato": Pages.EXTRATO,
-            f"{UI.ICONS['rendimentos']} Rendimentos": Pages.RENDIMENTOS,
-            f"{UI.ICONS['contas']} Contas Mensais": Pages.CONTAS,
-        })
 
     # Páginas admin
     if is_admin():

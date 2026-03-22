@@ -91,12 +91,11 @@ def _render_real_extrato() -> None:
 def _render_visitor_extrato() -> None:
     """Extrato com dados mock para visitantes."""
     from auth.session import render_visitor_banner
-    from mock.mock_data import get_mock_dashboard_data
+    from mock.mock_data import get_mock_transactions
 
     render_visitor_banner()
 
-    mock_data = get_mock_dashboard_data()
-    transactions = mock_data.get("recent_transactions", [])
+    transactions = get_mock_transactions()
 
     if not transactions:
         st.info(Messages.NO_DATA)
