@@ -16,6 +16,8 @@ Usage:
         result = conn.execute(text("SELECT * FROM users"))
 """
 
+from __future__ import annotations
+
 import logging
 from contextlib import contextmanager
 from typing import Generator

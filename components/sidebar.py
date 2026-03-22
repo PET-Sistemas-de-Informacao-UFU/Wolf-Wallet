@@ -1,0 +1,158 @@
+"""
+🐺 Wolf Wallet — Sidebar Navigation
+
+Sidebar responsiva com:
+    - Branding do projeto
+    - Info do usuário logado
+    - Navegação condicional por role
+    - Toggle ocultar saldo
+    - Botão de logout
+
+Usage:
+    from components.sidebar import render_sidebar
+"""
+
+from __future__ import annotations
+
+import streamlit as st
+
+from auth.session import (
+    get_current_user,
+    is_admin,
+    is_visitor,
+    logout_user,
+    toggle_hide_balance,
+    is_balance_hidden,
+)
+from config.settings import App, Pages, SessionKeys, UI
+
+
+def render_sidebar() -> str:
+    """
+    Renderiza o sidebar completo e retorna a página selecionada.
+
+    Returns:
+        str: Identificador da página selecionada pelo usuário.
+    """
+    with st.sidebar:
+        _render_brand()
+        _render_user_info()
+        st.divider()
+        selected_page = _render_navigation()
+        st.divider()
+        _render_controls()
+        _render_logout()
+
+    return selected_page
+
+
+def _render_brand() -> None:
+    """Logo e título do app no topo do sidebar."""
+    st.markdown(
+        f"""
+        <div style="text-align: center; padding: 0.5rem 0;">
+            <span style="font-size: 2.5rem;">{App.EMOJI}</span>
+            <h3 style="margin: 0;">{App.NAME}</h3>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_user_info() -> None:
+    """Exibe informações do usuário logado ou modo visitante."""
+    user = get_current_user()
+
+    if user:
+        role_badge = "🔑 Admin" if user["role"] == "admin" else "👤 Membro"
+        st.markdown(
+            f"""
+            <div style="text-align: center; padding: 0.3rem 0;">
+                <p style="margin: 0; font-weight: bold;">{user['name']}</p>
+                <p style="margin: 0; color: gray; font-size: 0.85rem;">
+                    {role_badge} • {user['email']}
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    elif is_visitor():
+        st.markdown(
+            """
+            <div style="text-align: center; padding: 0.3rem 0;">
+                <p style="margin: 0; font-weight: bold;">👀 Visitante</p>
+                <p style="margin: 0; color: gray; font-size: 0.85rem;">
+                    Modo demonstração
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def _render_navigation() -> str:
+    """
+    Renderiza os links de navegação baseados no role do usuário.
+
+    Returns:
+        str: Identificador da página selecionada.
+    """
+    # Páginas acessíveis por todos (logados + visitantes)
+    nav_items: dict[str, str] = {
+        f"{UI.ICONS['dashboard']} Dashboard": Pages.HOME,
+    }
+
+    # Páginas que requerem login (não aparecem para visitantes)
+    if not is_visitor():
+        nav_items.update({
+            f"{UI.ICONS['extrato']} Extrato": Pages.EXTRATO,
+            f"{UI.ICONS['rendimentos']} Rendimentos": Pages.RENDIMENTOS,
+            f"{UI.ICONS['contribuicoes']} Contribuições": Pages.CONTRIBUICOES,
+            f"{UI.ICONS['contas']} Contas Mensais": Pages.CONTAS,
+        })
+
+    # Páginas admin
+    if is_admin():
+        nav_items.update({
+            f"{UI.ICONS['admin_usuarios']} Usuários": Pages.ADMIN_USUARIOS,
+            f"{UI.ICONS['admin_sync']} Sincronização": Pages.ADMIN_SYNC,
+        })
+
+    # Determina o index atual
+    current_page = st.session_state.get(SessionKeys.CURRENT_PAGE, Pages.HOME)
+    current_index = 0
+    page_values = list(nav_items.values())
+    if current_page in page_values:
+        current_index = page_values.index(current_page)
+
+    selected_label = st.radio(
+        "Navegação",
+        options=list(nav_items.keys()),
+        index=current_index,
+        label_visibility="collapsed",
+    )
+
+    selected_page = nav_items.get(selected_label, Pages.HOME)
+    st.session_state[SessionKeys.CURRENT_PAGE] = selected_page
+
+    return selected_page
+
+
+def _render_controls() -> None:
+    """Renderiza controles globais: ocultar saldo."""
+    hidden = is_balance_hidden()
+    icon = "👁️" if not hidden else "👁️‍🗨️"
+    label = "Mostrar saldo" if hidden else "Ocultar saldo"
+
+    if st.button(f"{icon} {label}", use_container_width=True, key="toggle_balance"):
+        toggle_hide_balance()
+        st.rerun()
+
+
+def _render_logout() -> None:
+    """Renderiza o botão de logout na parte inferior do sidebar."""
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    if st.button("🚪 Sair", use_container_width=True, key="logout_btn"):
+        logout_user()
+        st.rerun()
