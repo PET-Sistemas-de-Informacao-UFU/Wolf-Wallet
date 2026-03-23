@@ -35,12 +35,15 @@ def _base_layout(title: str = "") -> dict:
         "xaxis": {
             "gridcolor": "rgba(255,255,255,0.05)",
             "showgrid": False,
+            "fixedrange": True,
         },
         "yaxis": {
             "gridcolor": "rgba(255,255,255,0.08)",
             "tickprefix": "R$ ",
             "tickformat": ",.0f",
+            "fixedrange": True,
         },
+        "dragmode": False,
         "hovermode": "x unified",
     }
 

@@ -160,6 +160,11 @@ def _render_force_change_password() -> None:
 def main() -> None:
     """Função principal — orquestra a inicialização e roteamento."""
     init_session_state()
+
+    # Sincronização automática D-1 (roda 1x por cold start)
+    from services.auto_sync import start_auto_sync
+    start_auto_sync()
+
     _route()
 
 

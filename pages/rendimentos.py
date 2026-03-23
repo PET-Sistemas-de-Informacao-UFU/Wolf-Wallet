@@ -78,7 +78,7 @@ def _render_real() -> None:
 
         st.markdown("##### 📊 Evolução Mensal")
         fig = _yield_chart(filtered_df)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
         st.divider()
 
@@ -162,7 +162,7 @@ def _render_visitor() -> None:
 
         st.markdown("##### 📊 Evolução Mensal")
         fig = _yield_chart(filtered_df)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
         st.divider()
 
@@ -345,6 +345,7 @@ def _yield_chart(df) -> go.Figure:
         xaxis={
             "gridcolor": "rgba(255,255,255,0.05)",
             "showgrid": False,
+            "fixedrange": True,
             "showspikes": True,
             "spikecolor": "rgba(255,255,255,0.15)",
             "spikethickness": 1,
@@ -355,11 +356,13 @@ def _yield_chart(df) -> go.Figure:
             "gridcolor": "rgba(255,255,255,0.08)",
             "tickprefix": "R$ ",
             "tickformat": ",.2f",
+            "fixedrange": True,
             "showspikes": True,
             "spikecolor": "rgba(255,255,255,0.15)",
             "spikethickness": 1,
             "spikedash": "dot",
         },
+        dragmode=False,
         hovermode="x unified",
         hoverlabel={
             "bgcolor": "#1E1E2E",
