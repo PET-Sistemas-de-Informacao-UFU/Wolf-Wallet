@@ -66,23 +66,16 @@ _MOBILE_CSS: str = """
         font-size: 1.3rem !important;
     }
 
-    /* Colunas do Streamlit — força stack vertical em mobile */
+    /* Colunas do Streamlit — permite wrap */
     [data-testid="stHorizontalBlock"] {
         flex-wrap: wrap !important;
         gap: 0.3rem !important;
     }
 
-    /* Cada coluna ocupa ~50% em mobile (2 por linha) para cards */
-    [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
-        min-width: 46% !important;
-        flex: 1 1 46% !important;
-    }
-
-    /* Botões de ação (usuarios) — NÃO empilhar, manter em linha */
-    .wolf-action-btns + div [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
-    .wolf-action-btns ~ div [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
-        min-width: unset !important;
-        flex: 1 1 auto !important;
+    /* NÃO empilhar colunas por padrão.
+       Só empilha os metric cards (4 colunas do dashboard/extrato). */
+    [data-testid="stMetric"] {
+        min-width: 0 !important;
     }
 
     /* Tabelas — scroll horizontal */
@@ -163,12 +156,6 @@ _MOBILE_CSS: str = """
 
     .main .block-container {
         padding: 0.5rem 0.5rem !important;
-    }
-
-    /* Tudo em coluna única */
-    [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
-        min-width: 100% !important;
-        flex: 1 1 100% !important;
     }
 
     h1 {

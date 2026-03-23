@@ -116,7 +116,6 @@ def _render_user_row(user: dict) -> None:
         )
 
         # Botões de ação em linha horizontal
-        st.markdown('<div class="wolf-action-btns">', unsafe_allow_html=True)
         btn_c1, btn_c2, btn_c3, btn_c4 = st.columns([1, 1, 1, 3])
 
         with btn_c1:
@@ -138,7 +137,6 @@ def _render_user_row(user: dict) -> None:
                 if st.button("🔑 Senha", key=f"reset_{user_id}", width="stretch"):
                     st.session_state[f"confirm_reset_{user_id}"] = True
                     st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
 
     # Confirmações fora do layout de colunas
     if st.session_state.get(f"confirm_deact_{user_id}"):
