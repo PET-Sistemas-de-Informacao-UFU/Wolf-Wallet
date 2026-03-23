@@ -119,6 +119,11 @@ def _render_manual_sync() -> None:
     end_date = None
 
     if sync_type == "Período personalizado":
+        st.info(
+            "⚠️ **Limite da API do Mercado Pago:** máximo de **60 dias** por sincronização. "
+            "Para importar históricos longos, execute múltiplas syncs de até 60 dias."
+        )
+
         col1, col2 = st.columns(2)
         with col1:
             begin_date_input = st.date_input(
@@ -135,6 +140,14 @@ def _render_manual_sync() -> None:
 
         begin_date = datetime.combine(begin_date_input, datetime.min.time())
         end_date = datetime.combine(end_date_input, datetime.max.time().replace(microsecond=0))
+
+        # Mostra dias selecionados
+        days_selected = (end_date - begin_date).days
+        if days_selected > 60:
+            st.error(
+                f"❌ Período selecionado: **{days_selected} dias**. "
+                f"Reduza para no máximo 60 dias."
+            )
 
     st.divider()
 
@@ -157,11 +170,11 @@ def _execute_sync(begin_date: datetime | None, end_date: datetime | None) -> Non
         )
 
     try:
-        from services.sync_service import run_daily_sync, sync_transactions_chunked
+        from services.sync_service import run_daily_sync, sync_transactions
 
         with st.spinner("Sincronizando..."):
             if begin_date and end_date:
-                result = sync_transactions_chunked(begin_date, end_date, progress_callback)
+                result = sync_transactions(begin_date, end_date, progress_callback)
             else:
                 result = run_daily_sync(progress_callback)
 

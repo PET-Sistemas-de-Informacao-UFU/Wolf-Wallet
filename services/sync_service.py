@@ -20,8 +20,8 @@ from services.mercadopago import MercadoPagoAPIError, get_client
 
 logger = logging.getLogger(__name__)
 
-# Máximo de dias por relatório na API do Mercado Pago
-_MAX_DAYS_PER_REPORT: int = 60
+# Limite da API do Mercado Pago (dias máximos por relatório)
+MAX_DAYS_PER_REPORT: int = 60
 
 
 def get_last_sync_date() -> datetime | None:
@@ -65,6 +65,20 @@ def sync_transactions(
         logger.info(msg)
         if progress_callback:
             progress_callback(msg)
+
+    # Valida limite de 60 dias da API
+    total_days = (end_date - begin_date).days
+    if total_days > MAX_DAYS_PER_REPORT:
+        error_msg = (
+            f"Período de {total_days} dias excede o limite de {MAX_DAYS_PER_REPORT} dias "
+            f"da API do Mercado Pago. Selecione um período menor (máx. 60 dias por sync)."
+        )
+        _progress(f"❌ {error_msg}")
+        return {
+            "status": "error",
+            "records_added": 0,
+            "message": error_msg,
+        }
 
     try:
         # 1. Conecta à API
@@ -175,75 +189,6 @@ def sync_transactions(
         }
 
 
-def sync_transactions_chunked(
-    begin_date: datetime,
-    end_date: datetime,
-    progress_callback: callable | None = None,
-) -> dict:
-    """
-    Sincroniza um período longo dividindo em chunks de até 60 dias.
-
-    A API do Mercado Pago retorna HTTP 400 para períodos maiores que ~60 dias.
-    Esta função divide automaticamente e acumula os resultados.
-
-    Args:
-        begin_date: Início do período total.
-        end_date: Fim do período total.
-        progress_callback: Função opcional para atualizar progresso.
-
-    Returns:
-        Dict com: status, records_added, message.
-    """
-    total_days = (end_date - begin_date).days
-
-    # Se cabe em um chunk, chama direto
-    if total_days <= _MAX_DAYS_PER_REPORT:
-        return sync_transactions(begin_date, end_date, progress_callback)
-
-    def _progress(msg: str) -> None:
-        logger.info(msg)
-        if progress_callback:
-            progress_callback(msg)
-
-    # Divide em chunks
-    chunks: list[tuple[datetime, datetime]] = []
-    chunk_start = begin_date
-    while chunk_start < end_date:
-        chunk_end = min(chunk_start + timedelta(days=_MAX_DAYS_PER_REPORT), end_date)
-        chunks.append((chunk_start, chunk_end))
-        chunk_start = chunk_end + timedelta(seconds=1)
-
-    total_records = 0
-    errors: list[str] = []
-
-    _progress(
-        f"📦 Período longo detectado ({total_days} dias). "
-        f"Dividindo em {len(chunks)} partes de até {_MAX_DAYS_PER_REPORT} dias..."
-    )
-
-    for i, (c_start, c_end) in enumerate(chunks, 1):
-        _progress(
-            f"📄 Parte {i}/{len(chunks)}: "
-            f"{c_start.strftime('%d/%m/%Y')} → {c_end.strftime('%d/%m/%Y')}"
-        )
-
-        result = sync_transactions(c_start, c_end, progress_callback)
-
-        if result["status"] == "success":
-            total_records += result["records_added"]
-        else:
-            errors.append(f"Parte {i}: {result['message']}")
-
-    if errors:
-        msg = (
-            f"Sincronização parcial: {total_records} registros importados, "
-            f"{len(errors)} erro(s):\n" + "\n".join(errors)
-        )
-        return {"status": "error", "records_added": total_records, "message": msg}
-
-    msg = f"Sincronização completa: {total_records} registros importados em {len(chunks)} partes."
-    _progress(f"✅ {msg}")
-    return {"status": "success", "records_added": total_records, "message": msg}
 
 
 def _enrich_new_transactions(
