@@ -335,13 +335,21 @@ _EXCLUDED_PAYMENT_METHODS: set[str] = {
     "elo", "hipercard", "diners",
 }
 
+# Tipos de transação excluídos da importação.
+# CASHBACK: movimentações do "Meli Dólar" (conta de cashback separada)
+# não pertencem ao caixa do PET-SI.
+_EXCLUDED_TRANSACTION_TYPES: set[str] = {
+    "CASHBACK",
+}
+
 
 def insert_transactions_batch(df: pd.DataFrame) -> int:
     """
     Insere transações em batch (ignora duplicatas).
 
-    Transações com payment_method de cartão de crédito/débito são
-    automaticamente filtradas pois não pertencem ao caixa do PET-SI.
+    Transações com payment_method de cartão de crédito/débito e
+    transações do tipo CASHBACK (Meli Dólar) são automaticamente
+    filtradas pois não pertencem ao caixa do PET-SI.
 
     Args:
         df: DataFrame com colunas alinhadas à tabela transactions.
@@ -362,6 +370,14 @@ def insert_transactions_batch(df: pd.DataFrame) -> int:
         excluded = before - len(df)
         if excluded > 0:
             logger.info(f"Filtradas {excluded} transações de cartão de crédito/débito.")
+
+    # Filtra transações de cashback (Meli Dólar)
+    if "transaction_type" in df.columns:
+        before = len(df)
+        df = df[~df["transaction_type"].str.upper().isin(_EXCLUDED_TRANSACTION_TYPES)]
+        excluded = before - len(df)
+        if excluded > 0:
+            logger.info(f"Filtradas {excluded} transações de cashback (Meli Dólar).")
 
     if df.empty:
         return 0

@@ -174,6 +174,10 @@ class MercadoPago:
     # master, visa, amex, elo, hipercard, diners, debit_card, credit_card
     # Motivo: a API Settlement inclui compras pessoais com cartão vinculado
     # à conta MP, que não pertencem ao caixa do PET-SI.
+    #
+    # Tipos de transação EXCLUÍDOS: CASHBACK
+    # Motivo: movimentações do Meli Dólar (cashback) são de uma conta
+    # separada e não pertencem ao caixa do PET-SI.
 
     # Colunas esperadas no CSV
     CSV_COLUMNS: list[str] = [
