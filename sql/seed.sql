@@ -1,51 +1,49 @@
 -- =============================================
--- 🐺 Wolf Wallet — Seed Data
+-- 🐺 Wolf Wallet — Seed Data (Exemplo)
 -- PostgreSQL (Supabase)
 --
--- Dados iniciais para desenvolvimento e teste.
--- Senhas hash bcrypt (rounds=12):
---   "Admin@123" → hash abaixo
---   "Membro@123" → hash abaixo
+-- Dados de exemplo para quem quiser rodar o projeto localmente.
+-- Em produção, os usuários são criados pelo painel admin.
 --
--- IMPORTANTE: Alterar senhas em produção!
+-- ⚠️  NÃO commitar senhas ou dados reais aqui!
 -- =============================================
 
 -- =============================================
--- ADMINS (2)
+-- EXEMPLO: Criando um admin
 -- =============================================
--- Senha padrão: Admin@123
-INSERT INTO users (name, email, password_hash, role)
-VALUES
-    (
-        'Administrador 1',
-        'admin1@wolfwallet.com',
-        '$2b$12$iNEx9RVRWK0zOVSWC034auOedB.JlnN4j1A6nqNdkLOjO8MV1LBpe',
-        'admin'
-    ),
-    (
-        'Administrador 2',
-        'admin2@wolfwallet.com',
-        '$2b$12$iNEx9RVRWK0zOVSWC034auOedB.JlnN4j1A6nqNdkLOjO8MV1LBpe',
-        'admin'
-    )
-ON CONFLICT (email) DO NOTHING;
+-- Para gerar o hash bcrypt da senha, use Python:
+--
+--   import bcrypt
+--   senha = "SuaSenha@123"
+--   hash = bcrypt.hashpw(senha.encode(), bcrypt.gensalt(rounds=12)).decode()
+--   print(hash)
+--
+-- Resultado exemplo para "Admin@123":
+--   $2b$12$iNEx9RVRWK0zOVSWC034auOedB.JlnN4j1A6nqNdkLOjO8MV1LBpe
+
+-- INSERT INTO users (name, email, password_hash, role)
+-- VALUES (
+--     'Nome do Admin',
+--     'admin@exemplo.com',
+--     '$2b$12$COLE_O_HASH_BCRYPT_AQUI',
+--     'admin'
+-- );
 
 -- =============================================
--- MEMBROS (12) — Nomes fictícios para dev
+-- EXEMPLO: Criando membros (role = 'user')
 -- =============================================
--- Senha padrão: Membro@123
-INSERT INTO users (name, email, password_hash, role)
-VALUES
-    ('Ana Silva', 'ana.silva@wolfwallet.com', '$2b$12$IaHpVo6.tmNs/1QhkfPcaeXFQPgH6fMIXMj1V9B9KfsbjeYXmofB.', 'user'),
-    ('Bruno Costa', 'bruno.costa@wolfwallet.com', '$2b$12$IaHpVo6.tmNs/1QhkfPcaeXFQPgH6fMIXMj1V9B9KfsbjeYXmofB.', 'user'),
-    ('Carla Oliveira', 'carla.oliveira@wolfwallet.com', '$2b$12$IaHpVo6.tmNs/1QhkfPcaeXFQPgH6fMIXMj1V9B9KfsbjeYXmofB.', 'user'),
-    ('Daniel Santos', 'daniel.santos@wolfwallet.com', '$2b$12$IaHpVo6.tmNs/1QhkfPcaeXFQPgH6fMIXMj1V9B9KfsbjeYXmofB.', 'user'),
-    ('Elena Pereira', 'elena.pereira@wolfwallet.com', '$2b$12$IaHpVo6.tmNs/1QhkfPcaeXFQPgH6fMIXMj1V9B9KfsbjeYXmofB.', 'user'),
-    ('Felipe Lima', 'felipe.lima@wolfwallet.com', '$2b$12$IaHpVo6.tmNs/1QhkfPcaeXFQPgH6fMIXMj1V9B9KfsbjeYXmofB.', 'user'),
-    ('Gabriela Souza', 'gabriela.souza@wolfwallet.com', '$2b$12$IaHpVo6.tmNs/1QhkfPcaeXFQPgH6fMIXMj1V9B9KfsbjeYXmofB.', 'user'),
-    ('Henrique Martins', 'henrique.martins@wolfwallet.com', '$2b$12$IaHpVo6.tmNs/1QhkfPcaeXFQPgH6fMIXMj1V9B9KfsbjeYXmofB.', 'user'),
-    ('Isabela Rocha', 'isabela.rocha@wolfwallet.com', '$2b$12$IaHpVo6.tmNs/1QhkfPcaeXFQPgH6fMIXMj1V9B9KfsbjeYXmofB.', 'user'),
-    ('João Ferreira', 'joao.ferreira@wolfwallet.com', '$2b$12$IaHpVo6.tmNs/1QhkfPcaeXFQPgH6fMIXMj1V9B9KfsbjeYXmofB.', 'user'),
-    ('Karen Almeida', 'karen.almeida@wolfwallet.com', '$2b$12$IaHpVo6.tmNs/1QhkfPcaeXFQPgH6fMIXMj1V9B9KfsbjeYXmofB.', 'user'),
-    ('Lucas Ribeiro', 'lucas.ribeiro@wolfwallet.com', '$2b$12$IaHpVo6.tmNs/1QhkfPcaeXFQPgH6fMIXMj1V9B9KfsbjeYXmofB.', 'user')
-ON CONFLICT (email) DO NOTHING;
+-- Hash exemplo para "Membro@123":
+--   $2b$12$IaHpVo6.tmNs/1QhkfPcaeXFQPgH6fMIXMj1V9B9KfsbjeYXmofB.
+
+-- INSERT INTO users (name, email, password_hash, role)
+-- VALUES
+--     ('Ana Silva',    'ana@exemplo.com',    '$2b$12$HASH...', 'user'),
+--     ('Bruno Costa',  'bruno@exemplo.com',  '$2b$12$HASH...', 'user'),
+--     ('Carla Santos', 'carla@exemplo.com',  '$2b$12$HASH...', 'user')
+-- ON CONFLICT (email) DO NOTHING;
+
+-- =============================================
+-- EXEMPLO: Forçando troca de senha no primeiro login
+-- =============================================
+-- UPDATE users SET must_change_password = true
+-- WHERE email IN ('ana@exemplo.com', 'bruno@exemplo.com');
