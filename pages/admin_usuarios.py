@@ -230,6 +230,10 @@ def _create_user(name: str, email: str, role: str, send_email: bool) -> None:
             st.error("Erro ao criar usuário.")
             return
 
+        # Marca para trocar senha no próximo login
+        from models.user import update_user
+        update_user(user["id"], must_change_password=True)
+
         st.success(f"✅ Usuário **{name}** criado com sucesso!")
 
         # Tenta enviar email
@@ -356,7 +360,7 @@ def _reset_password(user_id: int, name: str, email: str) -> None:
     temp_password = generate_temp_password()
 
     try:
-        if update_user(user_id, password_hash=hash_password(temp_password)):
+        if update_user(user_id, password_hash=hash_password(temp_password), must_change_password=True):
             email_sent = send_password_reset_email(name, email, temp_password)
 
             if email_sent:

@@ -17,6 +17,20 @@ import streamlit as st
 from components.hide_balance import mask_value
 from services.report_service import classify_transaction, format_currency
 
+# Mapas de tradução para exibição na tabela
+_TYPE_LABELS: dict[str, str] = {
+    "SETTLEMENT": "Liquidação",
+    "REFUND": "Devolução",
+    "PAYOUTS": "Saque",
+}
+
+_METHOD_LABELS: dict[str, str] = {
+    "pix": "PIX",
+    "account_money": "Saldo em conta",
+    "available_money": "Dinheiro disponível",
+    "": "CDI",
+}
+
 
 def render_transaction_table(transactions: list[dict]) -> None:
     """
@@ -83,7 +97,8 @@ def _render_transaction_row(txn: dict, classification: dict) -> None:
         st.caption(f"{date_str} • {source_id}" if source_id else date_str)
 
     with cols[2]:
-        st.markdown(f"`{txn_type}`")
+        type_label = _TYPE_LABELS.get(txn_type, txn_type)
+        st.markdown(f"`{type_label}`")
 
     with cols[3]:
         st.markdown(

@@ -231,6 +231,7 @@ class SessionKeys:
     HIDE_BALANCE: str = "hide_balance"
     CURRENT_PAGE: str = "current_page"
     THEME: str = "theme"
+    MUST_CHANGE_PASSWORD: str = "must_change_password"
 
 
 # =============================================

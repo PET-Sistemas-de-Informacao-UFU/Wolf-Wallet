@@ -54,14 +54,14 @@ def render_transaction_filters(key_prefix: str = "extrato") -> dict:
         with col4:
             transaction_type = st.selectbox(
                 "Tipo de transação",
-                options=["Todos", "SETTLEMENT", "REFUND", "PAYOUTS"],
+                options=["Todos", "Liquidação", "Devolução", "Saque"],
                 key=f"{key_prefix}_type",
             )
 
         with col5:
             payment_method = st.selectbox(
                 "Método",
-                options=["Todos", "pix", "account_money", "available_money", "(vazio)"],
+                options=["Todos", "PIX", "Saldo em conta", "Dinheiro disponível", "Rendimento (CDI)"],
                 key=f"{key_prefix}_method",
             )
 
@@ -73,16 +73,27 @@ def render_transaction_filters(key_prefix: str = "extrato") -> dict:
                 placeholder="Ex: 1274390661073",
             )
 
-    # Mapeia para valores do model
+    # Mapeia labels traduzidos para valores da API
     direction_map = {"Todas": None, "Entradas": "inflows", "Saídas": "outflows"}
-    type_map = {"Todos": None}
-    method_map = {"Todos": None, "(vazio)": ""}
+    type_map = {
+        "Todos": None,
+        "Liquidação": "SETTLEMENT",
+        "Devolução": "REFUND",
+        "Saque": "PAYOUTS",
+    }
+    method_map = {
+        "Todos": None,
+        "PIX": "pix",
+        "Saldo em conta": "account_money",
+        "Dinheiro disponível": "available_money",
+        "Rendimento (CDI)": "",
+    }
 
     return {
         "start_date": start_date,
         "end_date": end_date,
-        "transaction_type": type_map.get(transaction_type, transaction_type),
-        "payment_method": method_map.get(payment_method, payment_method),
+        "transaction_type": type_map.get(transaction_type),
+        "payment_method": method_map.get(payment_method),
         "direction": direction_map.get(direction),
         "search": search.strip() or None,
     }

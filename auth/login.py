@@ -50,10 +50,12 @@ def _render_header() -> None:
     """Renderiza o cabeçalho com branding do projeto."""
     st.markdown(
         f"""
-        <div style="text-align: center; padding: 1rem 0;">
-            <h1 style="margin-bottom: 0.2rem;">{App.TITLE}</h1>
-            <p style="color: gray; font-size: 1.05rem;">
-                {App.DESCRIPTION}
+        <div style="text-align: center; padding: 2rem 0 1rem 0;">
+            <h1 style="margin: 0; font-size: 2.2rem; letter-spacing: -0.5px;">🐺 {App.NAME} 💰</h1>
+            <h4 style="color: #888; font-weight: 400; margin-top: 0.6rem;">Carteira virtual do PET-SI — UFU</h4>
+            <p style="color: #666; font-size: 0.85rem; margin-top: 0.8rem; line-height: 1.5;">
+                Visualize as movimentações financeiras da conta<br>
+                compartilhada de forma transparente e automatizada.
             </p>
         </div>
         """,
@@ -64,7 +66,7 @@ def _render_header() -> None:
 def _render_login_form() -> None:
     """Renderiza o formulário de login com email e senha."""
     with st.form("login_form", clear_on_submit=False):
-        st.markdown("##### 🔐 Entrar na sua conta")
+        st.markdown("##### 🔐 Acesse sua conta")
 
         email = st.text_input(
             "Email",
@@ -180,7 +182,7 @@ def _handle_forgot_password(email: str) -> None:
             return
 
         temp_password = generate_temp_password()
-        update_user(user["id"], password_hash=hash_password(temp_password))
+        update_user(user["id"], password_hash=hash_password(temp_password), must_change_password=True)
 
         if is_email_configured():
             sent = send_password_reset_email(user["name"], email, temp_password)

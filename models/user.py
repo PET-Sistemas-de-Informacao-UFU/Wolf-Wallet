@@ -29,7 +29,7 @@ def get_user_by_email(email: str) -> dict | None:
         Dicionário com os dados do usuário, ou None se não encontrado.
     """
     rows = execute_query(
-        "SELECT id, name, email, password_hash, role, is_active, created_at, updated_at "
+        "SELECT id, name, email, password_hash, role, is_active, must_change_password, created_at, updated_at "
         "FROM users WHERE email = :email",
         {"email": email.strip().lower()},
     )
@@ -47,7 +47,7 @@ def get_user_by_id(user_id: int) -> dict | None:
         Dicionário com os dados do usuário, ou None se não encontrado.
     """
     rows = execute_query(
-        "SELECT id, name, email, password_hash, role, is_active, created_at, updated_at "
+        "SELECT id, name, email, password_hash, role, is_active, must_change_password, created_at, updated_at "
         "FROM users WHERE id = :id",
         {"id": user_id},
     )
@@ -146,7 +146,7 @@ def update_user(user_id: int, **fields) -> bool:
     Raises:
         ValueError: Se tentar atualizar campo não permitido.
     """
-    allowed_fields = {"name", "email", "role", "password_hash", "is_active"}
+    allowed_fields = {"name", "email", "role", "password_hash", "is_active", "must_change_password"}
     invalid = set(fields.keys()) - allowed_fields
     if invalid:
         raise ValueError(f"Campos não permitidos: {invalid}")

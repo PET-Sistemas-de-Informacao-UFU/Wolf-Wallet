@@ -51,8 +51,7 @@ def _render_brand() -> None:
     st.markdown(
         f"""
         <div style="text-align: center; padding: 0.5rem 0;">
-            <span style="font-size: 2.5rem;">{App.EMOJI}</span>
-            <h3 style="margin: 0;">{App.NAME}</h3>
+            <h3 style="margin: 0; letter-spacing: -0.3px;">🐺 {App.NAME} 💰</h3>
         </div>
         """,
         unsafe_allow_html=True,
@@ -135,7 +134,7 @@ def _render_navigation() -> str:
 def _render_controls() -> None:
     """Renderiza controles globais: ocultar saldo + alterar senha."""
     hidden = is_balance_hidden()
-    icon = "👁️" if not hidden else "👁️‍🗨️"
+    icon = "👁️" if not hidden else "✕"
     label = "Mostrar saldo" if hidden else "Ocultar saldo"
 
     if st.button(f"{icon} {label}", use_container_width=True, key="toggle_balance"):

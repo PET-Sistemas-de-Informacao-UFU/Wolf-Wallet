@@ -101,11 +101,17 @@ def classify_transaction(transaction: dict) -> dict:
             "category": "transfer",
         }
 
+    _METHOD_DISPLAY: dict[str, str] = {
+        "pix": "PIX",
+        "account_money": "saldo em conta",
+        "available_money": "disponível",
+    }
+
     # Liquidação genérica positiva
     if t_type == "SETTLEMENT" and amount > 0:
         return {
             "icon": "📥",
-            "description": f"Recebimento ({method or 'outros'})",
+            "description": f"Recebimento ({_METHOD_DISPLAY.get(method, method or 'outros')})",
             "color": Colors.POSITIVE,
             "category": "settlement_in",
         }
@@ -114,7 +120,7 @@ def classify_transaction(transaction: dict) -> dict:
     if t_type == "SETTLEMENT" and amount < 0:
         return {
             "icon": "📤",
-            "description": f"Pagamento ({method or 'outros'})",
+            "description": f"Pagamento ({_METHOD_DISPLAY.get(method, method or 'outros')})",
             "color": Colors.NEGATIVE,
             "category": "settlement_out",
         }

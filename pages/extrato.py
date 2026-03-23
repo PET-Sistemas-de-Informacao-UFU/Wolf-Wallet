@@ -182,16 +182,32 @@ def _render_csv_export(filters: dict) -> None:
         st.error(f"Erro ao exportar: {e}")
 
 
+_TYPE_LABELS: dict[str, str] = {
+    "SETTLEMENT": "Liquidação",
+    "REFUND": "Devolução",
+    "PAYOUTS": "Saque",
+}
+
+_METHOD_LABELS: dict[str, str] = {
+    "pix": "PIX",
+    "account_money": "Saldo em conta",
+    "available_money": "Dinheiro disponível",
+    "": "CDI",
+}
+
+
 def _transactions_to_dataframe(transactions: list[dict]) -> pd.DataFrame:
     """Converte lista de transações para DataFrame formatado para exportação."""
     rows = []
     for txn in transactions:
         classification = classify_transaction(txn)
+        raw_type = txn.get("transaction_type", "")
+        raw_method = txn.get("payment_method", "")
         rows.append({
             "Data": _format_date_export(txn.get("transaction_date")),
             "Descrição": classification["description"],
-            "Tipo": txn.get("transaction_type", ""),
-            "Método": txn.get("payment_method", ""),
+            "Tipo": _TYPE_LABELS.get(raw_type, raw_type),
+            "Método": _METHOD_LABELS.get(raw_method, raw_method),
             "Valor Bruto": float(txn.get("transaction_amount", 0)),
             "Taxa": float(txn.get("fee_amount", 0)),
             "Valor Líquido": float(txn.get("settlement_net_amount", 0)),

@@ -34,6 +34,7 @@ def init_session_state() -> None:
         SessionKeys.HIDE_BALANCE: False,
         SessionKeys.CURRENT_PAGE: Pages.LOGIN,
         SessionKeys.THEME: "dark",
+        SessionKeys.MUST_CHANGE_PASSWORD: False,
     }
 
     for key, default_value in defaults.items():
@@ -62,6 +63,7 @@ def login_user(user: dict) -> None:
     }
     st.session_state[SessionKeys.ROLE] = user["role"]
     st.session_state[SessionKeys.CURRENT_PAGE] = Pages.HOME
+    st.session_state[SessionKeys.MUST_CHANGE_PASSWORD] = user.get("must_change_password", False)
 
 
 def login_visitor() -> None:

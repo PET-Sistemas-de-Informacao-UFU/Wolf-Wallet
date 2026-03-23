@@ -19,12 +19,13 @@ from auth.session import (
     is_authenticated,
     is_visitor,
     get_current_page,
+    get_current_user,
     render_visitor_banner,
     require_auth,
     require_admin,
 )
 from components.sidebar import render_sidebar
-from config.settings import App, Pages, UI
+from config.settings import App, Pages, SessionKeys, UI
 from pages.admin_sync import render_admin_sync
 from pages.admin_usuarios import render_admin_usuarios
 from pages.contas import render_contas
@@ -80,10 +81,16 @@ def _route() -> None:
     Determina e renderiza a página correta.
 
     Se não autenticado e não visitante → login.
+    Se must_change_password → tela obrigatória de troca.
     Se autenticado ou visitante → sidebar + página selecionada.
     """
     if not is_authenticated() and not is_visitor():
         render_login()
+        return
+
+    # Intercepta troca obrigatória de senha
+    if st.session_state.get(SessionKeys.MUST_CHANGE_PASSWORD, False):
+        _render_force_change_password()
         return
 
     # Renderiza sidebar e obtém a página selecionada
@@ -95,6 +102,56 @@ def _route() -> None:
         renderer()
     else:
         _render_coming_soon(selected_page)
+
+
+def _render_force_change_password() -> None:
+    """Tela obrigatória de troca de senha (primeiro acesso ou após reset)."""
+    # Esconde sidebar
+    st.markdown(
+        "<style>[data-testid='stSidebar']{display:none;}"
+        "[data-testid='stSidebarCollapsedControl']{display:none;}</style>",
+        unsafe_allow_html=True,
+    )
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown(
+            f"<div style='text-align:center;padding:1rem 0;'>"
+            f"<span style='font-size:2.5rem;'>🔐</span>"
+            f"<h2>Defina sua nova senha</h2>"
+            f"<p style='color:#888;'>Sua senha precisa ser atualizada antes de continuar.</p>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+        with st.form("force_change_pw"):
+            new_pw = st.text_input("Nova senha", type="password")
+            confirm_pw = st.text_input("Confirmar nova senha", type="password")
+            submitted = st.form_submit_button("✅ Salvar nova senha", type="primary", use_container_width=True)
+
+        if submitted:
+            if not new_pw or not confirm_pw:
+                st.error("Preencha ambos os campos.")
+            elif new_pw != confirm_pw:
+                st.error("As senhas não coincidem.")
+            else:
+                from auth.password import hash_password, validate_password_strength
+                from models.user import update_user
+
+                errors = validate_password_strength(new_pw)
+                if errors:
+                    for e in errors:
+                        st.error(e)
+                else:
+                    user = get_current_user()
+                    if user and update_user(user["id"], password_hash=hash_password(new_pw), must_change_password=False):
+                        st.session_state[SessionKeys.MUST_CHANGE_PASSWORD] = False
+                        st.success("✅ Senha atualizada! Redirecionando...")
+                        import time
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("Erro ao atualizar senha.")
 
 
 # =============================================
