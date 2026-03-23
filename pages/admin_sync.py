@@ -157,11 +157,11 @@ def _execute_sync(begin_date: datetime | None, end_date: datetime | None) -> Non
         )
 
     try:
-        from services.sync_service import run_daily_sync, sync_transactions
+        from services.sync_service import run_daily_sync, sync_transactions_chunked
 
         with st.spinner("Sincronizando..."):
             if begin_date and end_date:
-                result = sync_transactions(begin_date, end_date, progress_callback)
+                result = sync_transactions_chunked(begin_date, end_date, progress_callback)
             else:
                 result = run_daily_sync(progress_callback)
 
