@@ -78,6 +78,13 @@ _MOBILE_CSS: str = """
         flex: 1 1 46% !important;
     }
 
+    /* Botões de ação (usuarios) — NÃO empilhar, manter em linha */
+    .wolf-action-btns + div [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
+    .wolf-action-btns ~ div [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+        min-width: unset !important;
+        flex: 1 1 auto !important;
+    }
+
     /* Tabelas — scroll horizontal */
     [data-testid="stDataFrame"],
     .stDataFrame {

@@ -152,7 +152,7 @@ def _render_manual_sync() -> None:
     st.divider()
 
     # Botão de sync
-    if st.button("🔄 Iniciar Sincronização", type="primary", use_container_width=True):
+    if st.button("🔄 Iniciar Sincronização", type="primary", width="stretch"):
         _execute_sync(begin_date, end_date)
 
 

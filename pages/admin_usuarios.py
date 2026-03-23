@@ -115,28 +115,30 @@ def _render_user_row(user: dict) -> None:
             unsafe_allow_html=True,
         )
 
-        # Botões de ação em linha (4 colunas = mais espaço horizontal)
+        # Botões de ação em linha horizontal
+        st.markdown('<div class="wolf-action-btns">', unsafe_allow_html=True)
         btn_c1, btn_c2, btn_c3, btn_c4 = st.columns([1, 1, 1, 3])
 
         with btn_c1:
-            if st.button("✏️ Editar", key=f"edit_{user_id}", use_container_width=True):
+            if st.button("✏️ Editar", key=f"edit_{user_id}", width="stretch"):
                 st.session_state[f"editing_user_{user_id}"] = True
                 st.rerun()
 
         with btn_c2:
             if is_active:
-                if st.button("🚫 Desativar", key=f"deact_{user_id}", use_container_width=True):
+                if st.button("🚫 Desativar", key=f"deact_{user_id}", width="stretch"):
                     st.session_state[f"confirm_deact_{user_id}"] = True
                     st.rerun()
             else:
-                if st.button("✅ Reativar", key=f"react_{user_id}", use_container_width=True):
+                if st.button("✅ Reativar", key=f"react_{user_id}", width="stretch"):
                     _reactivate_user(user_id, name)
 
         with btn_c3:
             if is_active:
-                if st.button("🔑 Senha", key=f"reset_{user_id}", use_container_width=True):
+                if st.button("🔑 Senha", key=f"reset_{user_id}", width="stretch"):
                     st.session_state[f"confirm_reset_{user_id}"] = True
                     st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
     # Confirmações fora do layout de colunas
     if st.session_state.get(f"confirm_deact_{user_id}"):

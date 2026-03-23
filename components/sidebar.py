@@ -145,7 +145,7 @@ def _render_controls() -> None:
     icon = "👁️" if not hidden else "✕"
     label = "Mostrar saldo" if hidden else "Ocultar saldo"
 
-    if st.button(f"{icon} {label}", use_container_width=True, key="toggle_balance"):
+    if st.button(f"{icon} {label}", width="stretch", key="toggle_balance"):
         toggle_hide_balance()
         st.rerun()
 
@@ -160,11 +160,15 @@ def _render_change_password() -> None:
     st.markdown(
         """
         <style>
-        [data-testid="stSidebar"] [data-testid="stExpander"] summary {
-            justify-content: center;
+        [data-testid="stSidebar"] [data-testid="stExpander"] details > summary {
+            display: flex !important;
+            justify-content: center !important;
+            text-align: center !important;
         }
-        [data-testid="stSidebar"] [data-testid="stExpander"] summary span {
-            text-align: center;
+        [data-testid="stSidebar"] [data-testid="stExpander"] details > summary > span {
+            display: flex !important;
+            justify-content: center !important;
+            flex: unset !important;
         }
         </style>
         """,
@@ -181,7 +185,7 @@ def _render_change_password() -> None:
             "Confirmar nova senha", type="password", key="sidebar_confirm_pw"
         )
 
-        if st.button("💾 Salvar", key="sidebar_save_pw", use_container_width=True):
+        if st.button("💾 Salvar", key="sidebar_save_pw", width="stretch"):
             if not current_pw or not new_pw or not confirm_pw:
                 st.error("Preencha todos os campos.")
                 return
@@ -220,7 +224,7 @@ def _render_logout() -> None:
     """Renderiza o botão de logout e rodapé com versão."""
     st.markdown("<br>", unsafe_allow_html=True)
 
-    if st.button("🚪 Sair", use_container_width=True, key="logout_btn"):
+    if st.button("🚪 Sair", width="stretch", key="logout_btn"):
         logout_user()
         st.rerun()
 

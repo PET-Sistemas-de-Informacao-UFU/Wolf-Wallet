@@ -86,14 +86,14 @@ def _render_login_form() -> None:
         with col_submit:
             submitted = st.form_submit_button(
                 "🔐 Entrar",
-                use_container_width=True,
+                width="stretch",
                 type="primary",
             )
 
         with col_forgot:
             forgot = st.form_submit_button(
                 "Esqueci minha senha",
-                use_container_width=True,
+                width="stretch",
             )
 
     # Processa login
@@ -220,7 +220,7 @@ def _render_visitor_button() -> None:
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        if st.button("👀 Entrar como Visitante", use_container_width=True):
+        if st.button("👀 Entrar como Visitante", width="stretch"):
             login_visitor()
             st.rerun()
 

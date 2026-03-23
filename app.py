@@ -131,7 +131,7 @@ def _render_force_change_password() -> None:
         with st.form("force_change_pw"):
             new_pw = st.text_input("Nova senha", type="password")
             confirm_pw = st.text_input("Confirmar nova senha", type="password")
-            submitted = st.form_submit_button("✅ Salvar nova senha", type="primary", use_container_width=True)
+            submitted = st.form_submit_button("✅ Salvar nova senha", type="primary", width="stretch")
 
         if submitted:
             if not new_pw or not confirm_pw:
