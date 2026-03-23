@@ -326,9 +326,22 @@ def get_monthly_chart_data(months: int = 12) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+# Métodos de pagamento de cartão de crédito — excluídos da importação.
+# A API Settlement Report do Mercado Pago inclui compras pessoais feitas
+# com cartão de crédito vinculado à conta, que NÃO pertencem ao caixa
+# do PET-SI. Apenas PIX, saldo em conta e rendimentos são relevantes.
+_EXCLUDED_PAYMENT_METHODS: set[str] = {
+    "master", "visa", "amex", "debit_card", "credit_card",
+    "elo", "hipercard", "diners",
+}
+
+
 def insert_transactions_batch(df: pd.DataFrame) -> int:
     """
     Insere transações em batch (ignora duplicatas).
+
+    Transações com payment_method de cartão de crédito/débito são
+    automaticamente filtradas pois não pertencem ao caixa do PET-SI.
 
     Args:
         df: DataFrame com colunas alinhadas à tabela transactions.
@@ -338,6 +351,17 @@ def insert_transactions_batch(df: pd.DataFrame) -> int:
     """
     from config.database import get_connection
     from sqlalchemy import text
+
+    if df.empty:
+        return 0
+
+    # Filtra transações de cartão de crédito/débito
+    if "payment_method" in df.columns:
+        before = len(df)
+        df = df[~df["payment_method"].fillna("").str.lower().isin(_EXCLUDED_PAYMENT_METHODS)]
+        excluded = before - len(df)
+        if excluded > 0:
+            logger.info(f"Filtradas {excluded} transações de cartão de crédito/débito.")
 
     if df.empty:
         return 0

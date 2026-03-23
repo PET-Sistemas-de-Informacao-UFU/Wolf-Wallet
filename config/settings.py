@@ -170,6 +170,11 @@ class MercadoPago:
     TIMEZONE: str = "GMT-03"
     HEADER_LANGUAGE: str = "pt"
 
+    # Métodos de pagamento EXCLUÍDOS da importação:
+    # master, visa, amex, elo, hipercard, diners, debit_card, credit_card
+    # Motivo: a API Settlement inclui compras pessoais com cartão vinculado
+    # à conta MP, que não pertencem ao caixa do PET-SI.
+
     # Colunas esperadas no CSV
     CSV_COLUMNS: list[str] = [
         "TRANSACTION_DATE",
