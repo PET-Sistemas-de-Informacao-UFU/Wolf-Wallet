@@ -22,6 +22,17 @@ def inject_mobile_css() -> None:
 _MOBILE_CSS: str = """
 <style>
 /* =============================================
+   🐺 Wolf Wallet — Global CSS Overrides
+   ============================================= */
+
+/* ---- Esconde anchor links (ícone de link ao lado dos títulos) ---- */
+.stMarkdown a[href^="#"],
+h1 a, h2 a, h3 a, h4 a, h5 a, h6 a,
+[data-testid="stHeadingWithActionElements"] a {
+    display: none !important;
+}
+
+/* =============================================
    🐺 Wolf Wallet — Mobile Responsive Overrides
    ============================================= */
 
