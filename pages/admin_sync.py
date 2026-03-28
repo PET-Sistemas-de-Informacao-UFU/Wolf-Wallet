@@ -19,7 +19,7 @@ import streamlit as st
 
 from auth.session import require_admin
 from components.sync_status import render_sync_banner
-from config.settings import Colors
+from config.settings import Colors, to_brasilia
 
 
 def render_admin_sync() -> None:
@@ -336,7 +336,7 @@ def _render_config() -> None:
 
 
 def _format_datetime(dt: datetime | str | None) -> str:
-    """Formata datetime para exibição."""
+    """Formata datetime para exibição (horário de Brasília)."""
     if dt is None:
         return "—"
     if isinstance(dt, str):
@@ -344,4 +344,6 @@ def _format_datetime(dt: datetime | str | None) -> str:
             dt = datetime.fromisoformat(dt)
         except ValueError:
             return dt
+    # Converte para horário de Brasília
+    dt = to_brasilia(dt)
     return dt.strftime("%d/%m/%Y %H:%M")

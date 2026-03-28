@@ -20,18 +20,19 @@ from datetime import datetime
 import streamlit as st
 
 from auth.session import is_visitor
-from config.settings import Colors
+from config.settings import Colors, to_brasilia, now_brasilia
 
 
 def render_sync_banner() -> None:
     """
     Renderiza o banner de status da sincronização.
 
-    - Se visitante: não exibe nada (modo mock).
+    - Se visitante: exibe banner fictício (modo demo).
     - Se sync rodando: mostra progresso em tempo real com steps.
     - Se idle: mostra a última sync com data e registros.
     """
     if is_visitor():
+        _render_mock_banner()
         return
 
     # Tenta obter progresso live da sync
@@ -45,6 +46,31 @@ def render_sync_banner() -> None:
         _render_running_banner(progress)
     else:
         _render_idle_banner(progress)
+
+
+def _render_mock_banner() -> None:
+    """Exibe banner fictício para modo visitante."""
+    st.markdown(
+        f"""
+        <div style="
+            background: rgba(0, 200, 83, 0.06);
+            border-radius: 10px;
+            padding: 0.6rem 1.2rem;
+            margin-bottom: 1rem;
+            border-left: 4px solid {Colors.POSITIVE};
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        ">
+            <span style="font-size: 1rem;">✅</span>
+            <span style="color: {Colors.POSITIVE}; font-size: 0.83rem;">
+                Última sincronização: 28/03/2026 08:00 — 142 registro(s) adicionado(s)
+                <span style="color: #888; font-size: 0.75rem;">(dados fictícios)</span>
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _render_running_banner(progress: dict) -> None:
@@ -209,7 +235,7 @@ def _render_idle_banner(progress: dict) -> None:
 
 
 def _format_dt(dt: datetime | str | None) -> str:
-    """Formata datetime para exibição no banner."""
+    """Formata datetime para exibição no banner (horário de Brasília)."""
     if dt is None:
         return "—"
     if isinstance(dt, str):
@@ -217,4 +243,6 @@ def _format_dt(dt: datetime | str | None) -> str:
             dt = datetime.fromisoformat(dt)
         except ValueError:
             return dt
+    # Converte para horário de Brasília
+    dt = to_brasilia(dt)
     return dt.strftime("%d/%m/%Y %H:%M")

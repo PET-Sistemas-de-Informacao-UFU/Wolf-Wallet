@@ -9,6 +9,29 @@ Usage:
 """
 
 from decimal import Decimal
+from datetime import datetime, timedelta, timezone
+
+
+# =============================================
+# Timezone (Brasília)
+# =============================================
+# UTC-3 (horário padrão de Brasília)
+TZ_BRASILIA = timezone(timedelta(hours=-3))
+
+
+def now_brasilia() -> datetime:
+    """Retorna datetime atual no fuso horário de Brasília."""
+    return datetime.now(TZ_BRASILIA)
+
+
+def to_brasilia(dt: datetime) -> datetime:
+    """Converte um datetime para o fuso horário de Brasília."""
+    if dt is None:
+        return None
+    # Se naive (sem timezone), assume UTC
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(TZ_BRASILIA)
 
 
 # =============================================
@@ -46,7 +69,6 @@ class Finance:
 
     # Máscara para valores ocultos
     HIDDEN_VALUE: str = "R$ ••••••"
-
 
 # =============================================
 # UI / UX Settings

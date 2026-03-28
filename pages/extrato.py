@@ -24,7 +24,7 @@ from auth.session import is_visitor, require_auth
 from components.filters import render_pagination, render_transaction_filters
 from components.sync_status import render_sync_banner
 from components.transaction_table import render_summary_cards, render_transaction_table
-from config.settings import Messages, UI
+from config.settings import Messages, UI, to_brasilia
 from services.report_service import classify_transaction, format_currency
 
 
@@ -222,7 +222,7 @@ def _transactions_to_dataframe(transactions: list[dict]) -> pd.DataFrame:
 
 
 def _format_date_export(dt: datetime | str | None) -> str:
-    """Formata data para exportação CSV."""
+    """Formata data para exportação CSV (horário de Brasília)."""
     if dt is None:
         return ""
     if isinstance(dt, str):
@@ -230,4 +230,6 @@ def _format_date_export(dt: datetime | str | None) -> str:
             dt = datetime.fromisoformat(dt)
         except ValueError:
             return dt
+    # Converte para horário de Brasília
+    dt = to_brasilia(dt)
     return dt.strftime("%d/%m/%Y %H:%M:%S")
