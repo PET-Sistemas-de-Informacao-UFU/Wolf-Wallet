@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 import streamlit as st
 
 from auth.session import require_admin
+from components.sync_status import render_sync_banner
 from config.settings import Colors
 
 
@@ -25,6 +26,8 @@ def render_admin_sync() -> None:
     """Renderiza o painel de sincronização."""
     if not require_admin():
         return
+
+    render_sync_banner()
 
     st.title("🔄 Painel de Sincronização")
     st.caption("Gerencie a sincronização de dados com a API do Mercado Pago.")
@@ -108,6 +111,20 @@ def _render_manual_sync() -> None:
         "O sistema irá consultar a API do Mercado Pago e importar novas transações."
     )
 
+    # Mostra período que será sincronizado no modo automático
+    try:
+        from services.sync_service import get_last_sync_date
+        last_sync = get_last_sync_date()
+        if last_sync:
+            inclusive_date = last_sync.replace(hour=0, minute=0, second=0)
+            st.info(
+                f"ℹ️ **Modo automático:** sincronizará desde "
+                f"**{inclusive_date.strftime('%d/%m/%Y')}** (início do dia da última sync, "
+                f"para recapturar transações tardias) até **agora**."
+            )
+    except Exception:
+        pass
+
     # Opções de período
     sync_type = st.radio(
         "Tipo de sincronização",
@@ -157,20 +174,37 @@ def _render_manual_sync() -> None:
 
 
 def _execute_sync(begin_date: datetime | None, end_date: datetime | None) -> None:
-    """Executa a sincronização com feedback visual."""
+    """Executa a sincronização com feedback visual e atualiza banner global."""
     progress_container = st.empty()
     status_container = st.empty()
 
     progress_messages: list[str] = []
 
     def progress_callback(msg: str) -> None:
+        """Atualiza tanto o feedback local quanto o banner global."""
         progress_messages.append(msg)
         progress_container.markdown(
             "\n\n".join(f"- {m}" for m in progress_messages)
         )
+        # Também alimenta o progresso global (banner)
+        try:
+            from services.auto_sync import _progress_callback as global_cb
+            global_cb(msg)
+        except Exception:
+            pass
 
     try:
         from services.sync_service import run_daily_sync, sync_transactions
+        from services.auto_sync import _update_progress
+
+        # Marca início no progresso global
+        _update_progress(
+            running=True,
+            steps=["🚀 Sincronização manual iniciada..."],
+            started_at=datetime.now(),
+            finished_at=None,
+            result=None,
+        )
 
         with st.spinner("Sincronizando..."):
             if begin_date and end_date:
@@ -178,12 +212,28 @@ def _execute_sync(begin_date: datetime | None, end_date: datetime | None) -> Non
             else:
                 result = run_daily_sync(progress_callback)
 
+        # Marca fim no progresso global
+        _update_progress(
+            running=False,
+            finished_at=datetime.now(),
+            result=result,
+        )
+
         if result["status"] == "success":
             status_container.success(f"✅ {result['message']}")
         else:
             status_container.error(f"❌ {result['message']}")
 
     except Exception as e:
+        try:
+            from services.auto_sync import _update_progress
+            _update_progress(
+                running=False,
+                finished_at=datetime.now(),
+                result={"status": "error", "records_added": 0, "message": str(e)},
+            )
+        except Exception:
+            pass
         status_container.error(f"❌ Erro inesperado: {e}")
 
 

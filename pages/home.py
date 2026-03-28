@@ -21,6 +21,7 @@ import streamlit as st
 from auth.session import is_balance_hidden, is_visitor, render_visitor_banner, require_auth
 from components.cards import render_dashboard_cards
 from components.charts import bar_chart_inflows_outflows
+from components.sync_status import render_sync_banner
 from config.settings import App, Colors, Finance, UI
 from services.report_service import build_activity_feed, build_bill_alerts, format_currency
 
@@ -31,6 +32,7 @@ def render_home() -> None:
         return
 
     render_visitor_banner()
+    render_sync_banner()
 
     st.title(f"{App.EMOJI} Dashboard")
 

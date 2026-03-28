@@ -166,8 +166,11 @@ def main() -> None:
     init_session_state()
 
     # Sincronização automática D-1 (roda 1x por cold start)
-    from services.auto_sync import start_auto_sync
+    from services.auto_sync import start_auto_sync, ensure_sync_freshness
     start_auto_sync()
+
+    # Verifica se os dados estão desatualizados (roda em cada page load)
+    ensure_sync_freshness()
 
     _route()
 

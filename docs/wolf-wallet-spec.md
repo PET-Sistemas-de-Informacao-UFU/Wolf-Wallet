@@ -53,16 +53,19 @@ Um site onde todos os membros acessam o dashboard financeiro da conta em tempo r
 ```
 
 ### Fluxo de dados
-1. **Job diário automático** consulta a API do Mercado Pago (1x/dia)
-2. Novos dados são salvos no banco Supabase
+1. **Sync automática** consulta a API do Mercado Pago (1x por cold start + verificação de freshness a cada page load)
+2. Novos dados são salvos no banco Supabase (duplicatas ignoradas via UNIQUE constraint)
 3. O frontend **sempre lê do banco**, nunca direto da API
 4. Dados históricos ficam permanentemente disponíveis sem necessidade de re-consultar a API
+
+### Keep-alive (GitHub Action)
+O Streamlit Community Cloud hiberna o app após ~7 dias de inatividade. Uma GitHub Action (`.github/workflows/keep-alive.yml`) faz ping a cada **3 dias** para manter o app ativo. O cold start provocado pelo ping também dispara a sync automática, mantendo os dados frescos.
 
 ---
 
 ## 4. Segurança e Credenciais
 
-> ⚠️ O repositório começará privado mas será público futuramente. Nenhuma credencial ou informação sensível pode estar no código-fonte.
+> ⚠️ O repositório começará privado mas será público futuramente. Nenhuma credencial ou informação sensível está no código-fonte.
 
 ### Regras obrigatórias
 - Todas as credenciais armazenadas via **`st.secrets`** (Streamlit Secrets) no deploy e **`.env`** no desenvolvimento local
@@ -261,14 +264,24 @@ https://api.mercadopago.com/v1/account/settlement_report
 
 ```
 Fluxo do sync job:
-1. Consultar sync_log para pegar a última data sincronizada
-2. Gerar relatório via POST /settlement_report (begin_date = última sync, end_date = ontem)
-3. Aguardar processamento (polling no /list até status = "processed")
-4. Baixar CSV via GET /:file_name
-5. Parsear com pandas
-6. Inserir novos registros na tabela transactions (ignorar duplicatas via UNIQUE constraint)
-7. Registrar no sync_log
+1. Consultar sync_log para pegar a última data sincronizada (end_date)
+2. begin_date = 00:00:00 do DIA da última sync (inclusivo, para recapturar
+   transações tardias que podem não ter entrado no relatório anterior)
+3. end_date = timestamp atual (agora)
+4. Se o período > 60 dias (limite da API), dividir em blocos consecutivos de 60 dias
+5. Para cada bloco:
+   a. Gerar relatório via POST /settlement_report
+   b. Aguardar processamento (polling por ID no /list até file_name disponível)
+   c. Baixar CSV via GET /:file_name
+   d. Parsear com pandas (filtra cartão de crédito e CASHBACK automaticamente)
+   e. Inserir novos registros na tabela transactions (ON CONFLICT DO NOTHING)
+   f. Enriquecer transações com descrição via GET /v1/payments/:id
+6. Registrar no sync_log
 ```
+
+> **Nota (v1.2.0):** O `begin_date` é propositalmente inclusivo (início do dia da última sync)
+> para garantir que transações realizadas no final do dia não sejam perdidas entre syncs.
+> Duplicatas são automaticamente ignoradas pela constraint UNIQUE da tabela.
 
 ### Rate Limit da API
 - **~300 requisições por minuto** (autenticado)
@@ -454,10 +467,15 @@ Tela de Login
 
 | Funcionalidade | Descrição |
 |---|---|
+| **Banner de status** | Exibido no topo — mostra última sync (data, registros) ou progresso em tempo real se rodando |
 | **Status da última sync** | Data, quantidade de registros, status (sucesso/erro) |
 | **Histórico de syncs** | Tabela com log de todas as sincronizações |
-| **Botão "Sincronizar agora"** | Dispara sync manual sob demanda |
+| **Botão "Sincronizar agora"** | Dispara sync manual sob demanda (mostra período inclusivo que será sincronizado) |
 | **Configuração** | Visualizar configuração atual do relatório na API do MP |
+
+> **Banner de status (v1.2.0):** O mesmo banner também aparece no Dashboard e no Extrato.
+> Durante uma sync em andamento, exibe as etapas intermediárias em tempo real
+> ("Conectando API...", "Baixando CSV...", etc.) com um expander de log detalhado.
 
 ---
 
@@ -493,6 +511,7 @@ O modo visitante deve exibir o dashboard completo com dados fictícios para fins
 - **Loading states** com spinners durante carregamento de dados
 - **Mensagens de sucesso/erro** com `st.success()`, `st.error()`, `st.warning()`
 - **Confirmação** antes de ações destrutivas (desativar usuário, etc.)
+- **Banner de sincronização** no topo do Dashboard, Extrato e Sync — mostra última sync (✅/❌) ou progresso em tempo real (🔄 com etapas detalhadas)
 
 ---
 
@@ -528,9 +547,10 @@ wolf-wallet/
 │
 ├── services/
 │   ├── mercadopago.py         # Integração com API do Mercado Pago
-│   ├── sync_service.py        # Job de sincronização diária
-│   ├── transaction_service.py # Lógica de negócio das transações
-│   └── report_service.py      # Geração de relatórios e cálculos
+│   ├── sync_service.py        # Job de sincronização (sync diária + chunked)
+│   ├── auto_sync.py           # Sync automática em background + freshness check
+│   ├── report_service.py      # Lógica de negócio e cálculos financeiros
+│   └── email_service.py       # Envio de email via Gmail SMTP
 │
 ├── models/
 │   ├── user.py                # CRUD de usuários
@@ -542,8 +562,11 @@ wolf-wallet/
 │   ├── sidebar.py             # Sidebar de navegação
 │   ├── cards.py               # Componentes de cards do dashboard
 │   ├── charts.py              # Gráficos reutilizáveis
-│   ├── tables.py              # Tabelas reutilizáveis
-│   └── hide_balance.py        # Componente de ocultar saldo
+│   ├── filters.py             # Filtros reutilizáveis (data, tipo, direção)
+│   ├── transaction_table.py   # Tabela de transações estilizada
+│   ├── hide_balance.py        # Componente de ocultar saldo
+│   ├── sync_status.py         # Banner de status da sincronização
+│   └── mobile_css.py          # CSS responsivo para mobile
 │
 ├── mock/
 │   └── mock_data.py           # Dados fictícios para modo visitante

@@ -1,18 +1,34 @@
-name: 🐺 Keep Alive
+name: 🐺 Keep Alive + Sync
 
 on:
   schedule:
-    # A cada 5 dias às 08:00 UTC (05:00 BRT)
-    - cron: "0 8 */5 * *"
+    # A cada 3 dias às 08:00 UTC (05:00 BRT)
+    # Streamlit Community Cloud hiberna após ~7 dias de inatividade.
+    # Intervalo de 3 dias dá margem segura para nunca dormir.
+    # Ao acordar o app (cold start), a auto-sync é disparada automaticamente.
+    - cron: "0 8 */3 * *"
   workflow_dispatch: # permite rodar manualmente pelo GitHub
 
 jobs:
-  ping:
+  ping-and-sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Wolf Wallet
+      - name: Ping Wolf Wallet (wake up → triggers auto-sync on cold start)
         run: |
           echo "🐺 Acordando Wolf Wallet..."
-          curl -sS -o /dev/null -w "HTTP %{http_code} em %{time_total}s\n" \
-            https://wolf-wallet.streamlit.app/
-          echo "✅ Ping concluído"
+
+          # Ping: acorda o app (cold start dispara auto-sync automaticamente)
+          # Timeout alto pois o cold start pode levar até 2 minutos
+          HTTP_CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
+            --max-time 120 \
+            "https://wolf-wallet.streamlit.app/")
+          echo "➡️  HTTP $HTTP_CODE"
+
+          # Segundo ping para garantir que o app estabilizou
+          sleep 15
+          HTTP_CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
+            --max-time 60 \
+            "https://wolf-wallet.streamlit.app/")
+          echo "➡️  Confirmação: HTTP $HTTP_CODE"
+
+          echo "✅ Keep-alive concluído (sync roda automaticamente no cold start)"

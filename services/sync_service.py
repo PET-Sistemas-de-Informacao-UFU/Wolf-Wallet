@@ -257,8 +257,12 @@ def run_daily_sync(progress_callback: callable | None = None) -> dict:
     Executa a sincronização diária automática.
 
     Determina o período automaticamente:
-        - begin_date: data da última sync bem-sucedida (ou 6 meses atrás)
-        - end_date: ontem 23:59:59
+        - begin_date: início do DIA da última sync (inclusive — captura
+          transações tardias daquele dia que podem ter ficado de fora)
+        - end_date: agora (timestamp atual)
+
+    Se a diferença ultrapassar 60 dias (limite da API), executa em
+    blocos consecutivos de até 60 dias.
 
     Args:
         progress_callback: Função opcional para atualizar progresso.
@@ -266,17 +270,24 @@ def run_daily_sync(progress_callback: callable | None = None) -> dict:
     Returns:
         Dict com: status, records_added, message.
     """
-    # Determina begin_date
+    def _progress(msg: str) -> None:
+        logger.info(msg)
+        if progress_callback:
+            progress_callback(msg)
+
+    # Determina begin_date (início do dia da última sync, para ser inclusivo)
     last_sync = get_last_sync_date()
     if last_sync:
-        begin_date = last_sync
+        # Volta ao 00:00:00 do dia da última sync para recapturar
+        # transações tardias que podem não ter entrado no relatório anterior
+        begin_date = last_sync.replace(hour=0, minute=0, second=0, microsecond=0)
     else:
         # Primeira sync: 6 meses atrás
         begin_date = datetime.now() - timedelta(days=180)
         begin_date = begin_date.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    # end_date: ontem 23:59:59
-    end_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(seconds=1)
+    # end_date: momento atual (captura o dia de hoje)
+    end_date = datetime.now().replace(second=0, microsecond=0)
 
     if begin_date >= end_date:
         return {
@@ -285,4 +296,62 @@ def run_daily_sync(progress_callback: callable | None = None) -> dict:
             "message": "Dados já estão atualizados (última sync é de hoje).",
         }
 
+    # Se o período excede 60 dias, executa em blocos
+    total_days = (end_date - begin_date).days
+    if total_days > MAX_DAYS_PER_REPORT:
+        return _sync_in_chunks(begin_date, end_date, progress_callback)
+
     return sync_transactions(begin_date, end_date, progress_callback)
+
+
+def _sync_in_chunks(
+    begin_date: datetime,
+    end_date: datetime,
+    progress_callback: callable | None = None,
+) -> dict:
+    """
+    Executa sync em blocos de até 60 dias quando o período total é maior.
+
+    Args:
+        begin_date: Início do período total.
+        end_date: Fim do período total.
+        progress_callback: Função opcional para atualizar progresso.
+
+    Returns:
+        Dict com: status, records_added, message.
+    """
+    def _progress(msg: str) -> None:
+        logger.info(msg)
+        if progress_callback:
+            progress_callback(msg)
+
+    total_records = 0
+    chunk_start = begin_date
+    chunk_num = 0
+
+    while chunk_start < end_date:
+        chunk_num += 1
+        chunk_end = min(chunk_start + timedelta(days=MAX_DAYS_PER_REPORT), end_date)
+
+        _progress(
+            f"📦 Bloco {chunk_num}: "
+            f"{chunk_start.strftime('%d/%m/%Y')} → {chunk_end.strftime('%d/%m/%Y')}"
+        )
+
+        result = sync_transactions(chunk_start, chunk_end, progress_callback)
+
+        if result["status"] == "error":
+            result["records_added"] += total_records
+            return result
+
+        total_records += result.get("records_added", 0)
+        chunk_start = chunk_end
+
+    message = f"Sincronização concluída em {chunk_num} bloco(s): {total_records} novas transações."
+    _progress(f"✅ {message}")
+
+    return {
+        "status": "success",
+        "records_added": total_records,
+        "message": message,
+    }

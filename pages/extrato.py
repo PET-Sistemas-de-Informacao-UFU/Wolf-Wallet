@@ -22,6 +22,7 @@ import streamlit as st
 
 from auth.session import is_visitor, require_auth
 from components.filters import render_pagination, render_transaction_filters
+from components.sync_status import render_sync_banner
 from components.transaction_table import render_summary_cards, render_transaction_table
 from config.settings import Messages, UI
 from services.report_service import classify_transaction, format_currency
@@ -31,6 +32,8 @@ def render_extrato() -> None:
     """Renderiza a página de extrato."""
     if not require_auth():
         return
+
+    render_sync_banner()
 
     st.title("📋 Extrato de Transações")
     st.caption("Histórico completo de movimentações da conta Mercado Pago.")

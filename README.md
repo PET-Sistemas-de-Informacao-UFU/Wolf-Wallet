@@ -157,6 +157,8 @@ wolf-wallet/
 - [x] **Fase 8** — Modo visitante (dados mockados)
 - [x] **Fase 9** — Polimento UX
 - [x] **Fase 10** — Deploy
+- [x] **v1.1.0** — Mobile UX, cookie session persistente, sidebar fixes, keep-alive action
+- [x] **v1.2.0** — Sync inclusivo (recaptura transações tardias), banner de status da sync, chunked sync >60 dias, keep-alive otimizado (3 dias)
 
 ---
 
