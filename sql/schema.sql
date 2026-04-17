@@ -234,6 +234,27 @@ CREATE OR REPLACE TRIGGER trg_users_updated_at
 
 
 -- =============================================
+-- ROW-LEVEL SECURITY (RLS)
+-- =============================================
+-- O Wolf Wallet acessa o banco via conexão direta (DATABASE_URL),
+-- NÃO via API REST do Supabase. Portanto, habilitamos RLS em todas
+-- as tabelas e bloqueamos acesso via API REST (roles anon e authenticated).
+-- A conexão direta usa o role 'postgres' que bypassa RLS automaticamente.
+
+-- 1. Habilitar RLS em todas as tabelas
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE password_reset_tokens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE monthly_bills ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bill_payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sync_log ENABLE ROW LEVEL SECURITY;
+
+-- 2. Sem policies = nenhum acesso via API REST (anon/authenticated)
+-- A conexão direta (role postgres) bypassa RLS, então o app continua funcionando.
+-- Se no futuro quiser expor algo via API REST, crie policies específicas aqui.
+
+
+-- =============================================
 -- FIM DO SCHEMA
 -- =============================================
 -- Após executar este script, todas as tabelas estarão prontas.
