@@ -2,11 +2,11 @@ name: 🐺 Keep Alive + Sync
 
 on:
   schedule:
-    # A cada 3 dias às 08:00 UTC (05:00 BRT)
-    # Streamlit Community Cloud hiberna após ~7 dias de inatividade.
-    # Intervalo de 3 dias dá margem segura para nunca dormir.
+    # A cada 6 horas (00:00, 06:00, 12:00, 18:00 UTC)
+    # Streamlit Community Cloud hiberna após 12h SEM tráfego.
+    # Intervalo de 6h garante que nunca atinge as 12h de inatividade.
     # Ao acordar o app (cold start), a auto-sync é disparada automaticamente.
-    - cron: "0 8 */3 * *"
+    - cron: "0 */6 * * *"
   workflow_dispatch: # permite rodar manualmente pelo GitHub
 
 jobs:
@@ -17,18 +17,29 @@ jobs:
         run: |
           echo "🐺 Acordando Wolf Wallet..."
 
-          # Ping: acorda o app (cold start dispara auto-sync automaticamente)
-          # Timeout alto pois o cold start pode levar até 2 minutos
-          HTTP_CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
+          # 1. Health check — endpoint interno do Streamlit (leve, direto)
+          echo "→ Verificando /_stcore/health..."
+          HEALTH=$(curl -sS --max-time 120 \
+            "https://wolf-wallet.streamlit.app/_stcore/health" || echo "FAIL")
+          echo "  Health: $HEALTH"
+
+          # 2. Ping na raiz com follow-redirect para simular visita real
+          echo "→ Pingando página principal..."
+          HTTP_CODE=$(curl -sS -L -o /dev/null -w "%{http_code}" \
             --max-time 120 \
             "https://wolf-wallet.streamlit.app/")
-          echo "➡️  HTTP $HTTP_CODE"
+          echo "  HTTP: $HTTP_CODE"
 
-          # Segundo ping para garantir que o app estabilizou
-          sleep 15
-          HTTP_CODE=$(curl -sS -o /dev/null -w "%{http_code}" \
-            --max-time 60 \
-            "https://wolf-wallet.streamlit.app/")
-          echo "➡️  Confirmação: HTTP $HTTP_CODE"
+          # 3. Segundo health check após estabilizar (garante que o app está warm)
+          sleep 10
+          HEALTH2=$(curl -sS --max-time 30 \
+            "https://wolf-wallet.streamlit.app/_stcore/health" || echo "FAIL")
+          echo "  Health (confirmação): $HEALTH2"
 
-          echo "✅ Keep-alive concluído (sync roda automaticamente no cold start)"
+          # 4. Resultado
+          if [ "$HEALTH2" = "ok" ]; then
+            echo "✅ App está acordado e saudável"
+          else
+            echo "⚠️ App pode não ter acordado corretamente (health=$HEALTH2)"
+            exit 1
+          fi
