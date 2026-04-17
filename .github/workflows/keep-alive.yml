@@ -13,33 +13,75 @@ jobs:
   ping-and-sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Wolf Wallet (wake up → triggers auto-sync on cold start)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Playwright
+        run: npx playwright install chromium --with-deps
+
+      - name: Wake up Wolf Wallet with headless browser
         run: |
-          echo "🐺 Acordando Wolf Wallet..."
+          cat << 'SCRIPT' > ping.mjs
+          import { chromium } from 'playwright';
 
-          # 1. Health check — endpoint interno do Streamlit (leve, direto)
-          echo "→ Verificando /_stcore/health..."
-          HEALTH=$(curl -sS --max-time 120 \
-            "https://wolf-wallet.streamlit.app/_stcore/health" || echo "FAIL")
-          echo "  Health: $HEALTH"
+          const APP_URL = 'https://wolf-wallet.streamlit.app/';
+          const TIMEOUT = 120_000; // 2 min (cold start pode levar tempo)
 
-          # 2. Ping na raiz com follow-redirect para simular visita real
-          echo "→ Pingando página principal..."
-          HTTP_CODE=$(curl -sS -L -o /dev/null -w "%{http_code}" \
-            --max-time 120 \
-            "https://wolf-wallet.streamlit.app/")
-          echo "  HTTP: $HTTP_CODE"
+          (async () => {
+            const browser = await chromium.launch();
+            const page = await browser.newPage();
 
-          # 3. Segundo health check após estabilizar (garante que o app está warm)
-          sleep 10
-          HEALTH2=$(curl -sS --max-time 30 \
-            "https://wolf-wallet.streamlit.app/_stcore/health" || echo "FAIL")
-          echo "  Health (confirmação): $HEALTH2"
+            console.log('🐺 Abrindo Wolf Wallet no headless browser...');
 
-          # 4. Resultado
-          if [ "$HEALTH2" = "ok" ]; then
-            echo "✅ App está acordado e saudável"
-          else
-            echo "⚠️ App pode não ter acordado corretamente (health=$HEALTH2)"
-            exit 1
-          fi
+            try {
+              // 1. Navega para o app
+              const response = await page.goto(APP_URL, {
+                waitUntil: 'networkidle',
+                timeout: TIMEOUT,
+              });
+              console.log(`➡️  Status: ${response?.status()}`);
+
+              // 2. Se o app está dormindo, clica no botão de acordar
+              const wakeBtn = page.getByRole('button', { name: /get this app back up/i });
+              if (await wakeBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                console.log('💤 App estava dormindo — acordando...');
+                await wakeBtn.click();
+                await page.waitForLoadState('networkidle', { timeout: TIMEOUT });
+                console.log('✅ App acordado com sucesso!');
+              } else {
+                console.log('✅ App já estava acordado!');
+              }
+
+              // 3. Aguarda 15s para o Streamlit estabilizar (WebSocket + auto-sync)
+              await page.waitForTimeout(15000);
+
+              // 4. Tira screenshot para debug (salvo como artifact)
+              await page.screenshot({ path: 'screenshot.png', fullPage: true });
+              console.log('📸 Screenshot salvo');
+
+              // 5. Verifica se o app carregou algo do Streamlit
+              const title = await page.title();
+              console.log(`📄 Título da página: "${title}"`);
+
+            } catch (err) {
+              console.error('❌ Erro:', err.message);
+              // Tenta screenshot mesmo com erro
+              await page.screenshot({ path: 'screenshot-error.png' }).catch(() => {});
+              process.exit(1);
+            } finally {
+              await browser.close();
+            }
+          })();
+          SCRIPT
+
+          node ping.mjs
+
+      - name: Upload screenshot (debug)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wolf-wallet-screenshot
+          path: screenshot*.png
+          retention-days: 3
