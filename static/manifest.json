@@ -4,8 +4,8 @@
   "description": "Gestão financeira do PET-SI",
   "display": "standalone",
   "orientation": "portrait",
-  "start_url": "../../",
-  "scope": "../../",
+  "start_url": "/",
+  "scope": "/",
   "background_color": "#0E1117",
   "theme_color": "#0E1117",
   "icons": [

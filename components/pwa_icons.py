@@ -8,9 +8,16 @@ Como funciona:
     - O ícone do atalho vem do <link rel="apple-touch-icon"> (iOS) e do
       web manifest (Android). O st.set_page_config(page_icon=...) só troca o
       favicon da aba, não o atalho.
-    - O componente injeta esses links no <head> do documento pai (o iframe do
-      st.components.html é same-origin, então acessa window.parent.document).
+    - No Streamlit Community Cloud o app roda dentro de um iframe aninhado:
+          documento externo (wolf-wallet.streamlit.app)   <- Chrome lê o manifest AQUI
+            └─ iframe do app (/~/+/)                       <- mesma origem que o topo
+                 └─ iframe do st.components.html           <- onde este script roda
+      Por isso é preciso injetar no `window.top.document` (o externo), e não no
+      `window.parent` (que é só o documento do app, no meio). Os dois são
+      mesma origem, então o acesso é permitido.
     - Os arquivos são servidos pela pasta static/ (enableStaticServing = true).
+      Na Cloud a URL do app tem prefixo (/~/+/), então a base dos assets é
+      derivada em runtime a partir do location do documento do app.
 
 Usage:
     from components.pwa_icons import inject_pwa_icons
@@ -21,24 +28,29 @@ from __future__ import annotations
 
 import streamlit.components.v1 as components
 
-# Caminho onde o Streamlit expõe a pasta ./static/ (enableStaticServing = true)
-_STATIC_URL_PATH = "/app/static"
-
 # Versão para "cache-busting" — incremente ao trocar os arquivos de ícone
-_ICON_VERSION = "1"
+_ICON_VERSION = "2"
 
 
 def inject_pwa_icons(app_title: str = "Wolf Wallet") -> None:
-    """Injeta apple-touch-icon, manifest e metas de PWA no <head> da página."""
+    """Injeta apple-touch-icon, manifest e metas de PWA no <head> externo."""
     components.html(
         f"""
         <script>
         (function () {{
-          try {{
-            const doc = window.parent.document;
+          const V = "?v={_ICON_VERSION}";
+          const TITLE = "{app_title}";
+
+          function appStaticBase() {{
+            // window.parent = documento do app (tem o base path correto, ex.: /~/+/ na Cloud)
+            const loc = window.parent.location;
+            let path = loc.pathname;
+            if (!path.endsWith("/")) path += "/";
+            return loc.origin + path + "app/static/";
+          }}
+
+          function inject(doc, base) {{
             const head = doc.head;
-            const base = window.parent.location.origin + "{_STATIC_URL_PATH}/";
-            const v = "?v={_ICON_VERSION}";
 
             function upsertLink(rel, href, sizes) {{
               doc.querySelectorAll("link[rel='" + rel + "']").forEach(function (el) {{
@@ -47,7 +59,7 @@ def inject_pwa_icons(app_title: str = "Wolf Wallet") -> None:
               const l = doc.createElement("link");
               l.setAttribute("rel", rel);
               if (sizes) l.setAttribute("sizes", sizes);
-              l.setAttribute("href", href + v);
+              l.setAttribute("href", href + V);
               head.appendChild(l);
             }}
 
@@ -61,21 +73,31 @@ def inject_pwa_icons(app_title: str = "Wolf Wallet") -> None:
               m.setAttribute("content", content);
             }}
 
-            // Ícone do atalho no iOS
             upsertLink("apple-touch-icon", base + "apple-touch-icon.png", "180x180");
-            // Favicon da aba (sobrescreve o emoji por consistência)
             upsertLink("icon", base + "icon-192.png", "192x192");
-            // Manifest (Android / Chrome)
             upsertLink("manifest", base + "manifest.json");
 
-            // Metadados do atalho
-            upsertMeta("apple-mobile-web-app-title", "{app_title}");
+            upsertMeta("apple-mobile-web-app-title", TITLE);
             upsertMeta("apple-mobile-web-app-capable", "yes");
             upsertMeta("apple-mobile-web-app-status-bar-style", "black-translucent");
             upsertMeta("theme-color", "#0E1117");
-          }} catch (e) {{
-            /* origem cruzada ou head indisponível — ignora silenciosamente */
           }}
+
+          function run() {{
+            try {{
+              const base = appStaticBase();
+              // Injeta no documento MAIS EXTERNO (onde o Chrome lê o manifest).
+              // Fallback para o documento do app se window.top não for acessível.
+              let doc;
+              try {{ doc = window.top.document; doc.head; }} catch (e) {{ doc = window.parent.document; }}
+              inject(doc, base);
+            }} catch (e) {{ /* origem cruzada ou head indisponível — ignora */ }}
+          }}
+
+          run();
+          // Reaplica: o wrapper do Streamlit Cloud pode reescrever o <head> após o load
+          setTimeout(run, 1500);
+          setTimeout(run, 4000);
         }})();
         </script>
         """,
