@@ -2,15 +2,73 @@ name: 🐺 Keep Alive + Sync
 
 on:
   schedule:
-    # A cada 6 horas (00:00, 06:00, 12:00, 18:00 UTC)
-    # Streamlit Community Cloud hiberna após 12h SEM tráfego.
-    # Intervalo de 6h garante que nunca atinge as 12h de inatividade.
+    # A cada 6 horas (00:00, 06:00, 12:00, 18:00 UTC).
+    # Streamlit Community Cloud hiberna após ~12h SEM tráfego —
+    # o intervalo de 6h garante que nunca atinge esse limite.
     # Ao acordar o app (cold start), a auto-sync é disparada automaticamente.
     - cron: "0 */6 * * *"
   workflow_dispatch: # permite rodar manualmente pelo GitHub
 
+# Evita execuções sobrepostas (ex.: manual + agendada ao mesmo tempo)
+concurrency:
+  group: keep-alive
+  cancel-in-progress: false
+
 jobs:
-  ping-and-sync:
+  # -------------------------------------------------------------------
+  # Job 1 — Mantém o Supabase ativo com um ping DIRETO ao banco.
+  # Independente do Streamlit: mesmo que o wake do app falhe, o banco
+  # continua sendo tocado e não hiberna (free tier pausa após ~7 dias).
+  # -------------------------------------------------------------------
+  keep-supabase-alive:
+    name: Ping Supabase (evita hibernação)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Ping direto no banco (SELECT 1)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "⚠️  Secret DATABASE_URL não configurado — pulando ping direto do Supabase."
+            echo "   Configure em: Settings → Secrets and variables → Actions → New repository secret"
+            echo "   (use a MESMA connection string do app, de preferência a do Connection Pooler / porta 6543,"
+            echo "    que suporta IPv4 nos runners do GitHub)."
+            exit 0
+          fi
+
+          python -m pip install --quiet "psycopg2-binary>=2.9,<3"
+
+          python - <<'PY'
+          import os, sys
+          import psycopg2
+
+          url = os.environ["DATABASE_URL"]
+          try:
+              conn = psycopg2.connect(url, connect_timeout=30)
+              with conn.cursor() as cur:
+                  cur.execute("SELECT 1;")
+                  cur.fetchone()
+              conn.close()
+              print("✅ Supabase respondeu — projeto mantido ativo.")
+          except Exception as e:
+              print(f"❌ Falha ao conectar no Supabase: {e}")
+              print("   Dica: se o erro for de rede/timeout, troque a connection string")
+              print("   para a do Connection Pooler (porta 6543), que suporta IPv4.")
+              sys.exit(1)
+          PY
+
+  # -------------------------------------------------------------------
+  # Job 2 — Acorda o Streamlit Community Cloud e dispara a auto-sync.
+  # Roda em paralelo ao Job 1, então uma falha aqui não impede o ping
+  # do Supabase (e vice-versa).
+  # -------------------------------------------------------------------
+  wake-streamlit:
+    name: Acordar Streamlit + disparar sync
     runs-on: ubuntu-latest
     steps:
       - name: Setup Node.js
@@ -30,47 +88,81 @@ jobs:
           import { chromium } from 'playwright';
 
           const APP_URL = 'https://wolf-wallet.streamlit.app/';
-          const TIMEOUT = 120_000; // 2 min (cold start pode levar tempo)
+          const NAV_TIMEOUT = 120_000;   // 2 min — cold start do Streamlit é lento
+          const APP_READY_TIMEOUT = 90_000;
+          const STABILIZE_MS = 30_000;   // tempo p/ WebSocket conectar e main() rodar (dispara sync)
 
           (async () => {
             const browser = await chromium.launch();
             const page = await browser.newPage();
+            page.setDefaultTimeout(NAV_TIMEOUT);
 
             console.log('🐺 Abrindo Wolf Wallet no headless browser...');
 
             try {
-              // 1. Navega para o app
+              // 1. Navega para o app.
+              //    IMPORTANTE: NÃO usar 'networkidle' — o Streamlit mantém um
+              //    WebSocket aberto + health-checks periódicos, então o
+              //    'networkidle' quase nunca estabiliza e o goto estoura timeout.
               const response = await page.goto(APP_URL, {
-                waitUntil: 'networkidle',
-                timeout: TIMEOUT,
+                waitUntil: 'domcontentloaded',
+                timeout: NAV_TIMEOUT,
               });
-              console.log(`➡️  Status: ${response?.status()}`);
+              console.log(`➡️  Status HTTP: ${response?.status()}`);
 
-              // 2. Se o app está dormindo, clica no botão de acordar
-              const wakeBtn = page.getByRole('button', { name: /get this app back up/i });
-              if (await wakeBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-                console.log('💤 App estava dormindo — acordando...');
-                await wakeBtn.click();
-                await page.waitForLoadState('networkidle', { timeout: TIMEOUT });
-                console.log('✅ App acordado com sucesso!');
-              } else {
-                console.log('✅ App já estava acordado!');
+              // 2. Se o app está dormindo, clica no botão de acordar.
+              //    O rótulo do botão já mudou algumas vezes; tentamos várias variações.
+              const wakeSelectors = [
+                'button:has-text("get this app back up")',
+                'button:has-text("Yes, get this app back up")',
+                'button:has-text("back up")',
+                '[data-testid="wakeup-button-viewer"]',
+              ];
+
+              let clickedWake = false;
+              for (const sel of wakeSelectors) {
+                const btn = page.locator(sel).first();
+                if (await btn.isVisible({ timeout: 5000 }).catch(() => false)) {
+                  console.log(`💤 App estava dormindo — acordando (selector: ${sel})...`);
+                  await btn.click().catch(() => {});
+                  clickedWake = true;
+                  break;
+                }
+              }
+              if (!clickedWake) {
+                console.log('✅ App já estava acordado (nenhum botão de wake encontrado).');
               }
 
-              // 3. Aguarda 15s para o Streamlit estabilizar (WebSocket + auto-sync)
-              await page.waitForTimeout(15000);
+              // 3. Aguarda o container real do app do Streamlit aparecer.
+              //    Isso garante que houve boot de fato (e não só a página de sleep).
+              const appReady = await page
+                .locator('[data-testid="stApp"], [data-testid="stAppViewContainer"]')
+                .first()
+                .waitFor({ state: 'attached', timeout: APP_READY_TIMEOUT })
+                .then(() => true)
+                .catch(() => false);
 
-              // 4. Tira screenshot para debug (salvo como artifact)
+              if (appReady) {
+                console.log('✅ Container do Streamlit carregado (app acordado).');
+              } else {
+                console.log('⚠️  Container do Streamlit não apareceu no tempo esperado — seguindo mesmo assim.');
+              }
+
+              // 4. Estabiliza: dá tempo do WebSocket conectar e o main() rodar
+              //    por completo — é isso que dispara a auto-sync e o ping ao banco.
+              console.log(`⏳ Aguardando ${STABILIZE_MS / 1000}s para o app rodar (WebSocket + auto-sync)...`);
+              await page.waitForTimeout(STABILIZE_MS);
+
+              // 5. Screenshot p/ debug (salvo como artifact).
               await page.screenshot({ path: 'screenshot.png', fullPage: true });
               console.log('📸 Screenshot salvo');
 
-              // 5. Verifica se o app carregou algo do Streamlit
               const title = await page.title();
               console.log(`📄 Título da página: "${title}"`);
+              console.log('🎉 Keep-alive concluído.');
 
             } catch (err) {
               console.error('❌ Erro:', err.message);
-              // Tenta screenshot mesmo com erro
               await page.screenshot({ path: 'screenshot-error.png' }).catch(() => {});
               process.exit(1);
             } finally {
