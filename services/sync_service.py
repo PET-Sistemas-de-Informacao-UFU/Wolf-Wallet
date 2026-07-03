@@ -329,6 +329,41 @@ def run_daily_sync(progress_callback: callable | None = None) -> dict:
     return sync_transactions(begin_date, end_date, progress_callback)
 
 
+def sync_custom_period(
+    begin_date: datetime,
+    end_date: datetime,
+    progress_callback: callable | None = None,
+) -> dict:
+    """
+    Sincroniza um período personalizado, quebrando automaticamente em blocos
+    de até 60 dias quando necessário (limite da API do Mercado Pago).
+
+    Usado pelo Sync Manual com período personalizado. Evita o erro
+    "período excede 60 dias" e impede que ranges grandes gerem relatórios
+    presos no Mercado Pago.
+
+    Args:
+        begin_date: Início do período.
+        end_date: Fim do período.
+        progress_callback: Função opcional para atualizar progresso.
+
+    Returns:
+        Dict com: status, records_added, message.
+    """
+    if begin_date >= end_date:
+        return {
+            "status": "error",
+            "records_added": 0,
+            "message": "A data de início deve ser anterior à data de fim.",
+        }
+
+    total_days = (end_date - begin_date).days
+    if total_days > MAX_DAYS_PER_REPORT:
+        return _sync_in_chunks(begin_date, end_date, progress_callback)
+
+    return sync_transactions(begin_date, end_date, progress_callback)
+
+
 def _sync_in_chunks(
     begin_date: datetime,
     end_date: datetime,

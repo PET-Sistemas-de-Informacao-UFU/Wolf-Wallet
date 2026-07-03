@@ -137,8 +137,8 @@ def _render_manual_sync() -> None:
 
     if sync_type == "Período personalizado":
         st.info(
-            "⚠️ **Limite da API do Mercado Pago:** máximo de **60 dias** por sincronização. "
-            "Para importar históricos longos, execute múltiplas syncs de até 60 dias."
+            "ℹ️ Períodos maiores que **60 dias** (limite da API do Mercado Pago) "
+            "são divididos **automaticamente** em blocos de até 60 dias."
         )
 
         col1, col2 = st.columns(2)
@@ -158,12 +158,16 @@ def _render_manual_sync() -> None:
         begin_date = datetime.combine(begin_date_input, datetime.min.time())
         end_date = datetime.combine(end_date_input, datetime.max.time().replace(microsecond=0))
 
-        # Mostra dias selecionados
+        # Feedback do período selecionado
         days_selected = (end_date - begin_date).days
-        if days_selected > 60:
-            st.error(
-                f"❌ Período selecionado: **{days_selected} dias**. "
-                f"Reduza para no máximo 60 dias."
+        if days_selected < 0:
+            st.error("❌ A data de início deve ser anterior à data de fim.")
+        elif days_selected > 60:
+            import math
+            n_blocos = math.ceil(days_selected / 60)
+            st.info(
+                f"📦 Período de **{days_selected} dias** será dividido em "
+                f"**{n_blocos} blocos** de até 60 dias."
             )
 
     st.divider()
@@ -194,7 +198,7 @@ def _execute_sync(begin_date: datetime | None, end_date: datetime | None) -> Non
             pass
 
     try:
-        from services.sync_service import run_daily_sync, sync_transactions
+        from services.sync_service import run_daily_sync, sync_custom_period
         from services.auto_sync import _update_progress
 
         # Marca início no progresso global
@@ -208,7 +212,7 @@ def _execute_sync(begin_date: datetime | None, end_date: datetime | None) -> Non
 
         with st.spinner("Sincronizando..."):
             if begin_date and end_date:
-                result = sync_transactions(begin_date, end_date, progress_callback)
+                result = sync_custom_period(begin_date, end_date, progress_callback)
             else:
                 result = run_daily_sync(progress_callback)
 
