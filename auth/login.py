@@ -237,3 +237,4 @@ def _render_visitor_button() -> None:
         f"</p>",
         unsafe_allow_html=True,
     )
+    st.markdown(App.CREDIT_HTML, unsafe_allow_html=True)

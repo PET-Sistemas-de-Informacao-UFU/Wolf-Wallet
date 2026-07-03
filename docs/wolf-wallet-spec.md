@@ -73,6 +73,7 @@ O Streamlit Community Cloud hiberna o app após ~7 dias de inatividade. Uma GitH
 - Senhas de usuários armazenadas com **hash bcrypt** (nunca em texto puro)
 - Tokens de redefinição de senha com **expiração de 30 minutos**
 - Access Token do Mercado Pago **nunca exposto no frontend**
+- **Row Level Security (RLS)** habilitado em todas as tabelas do Supabase (v1.3.0)
 
 ### Variáveis de ambiente necessárias
 
@@ -676,3 +677,30 @@ JWT_SECRET = "chave-secreta-aleatoria"
 - [ ] App mobile (Streamlit funciona em mobile browser)
 - [ ] Relatórios em PDF para download
 - [ ] Integração com outras APIs financeiras
+
+---
+
+## 16. Histórico de Versões (Changelog)
+
+### v1.3.0 (atual)
+**Infraestrutura & confiabilidade**
+- **Keep-alive robusto:** GitHub Action a cada 6h com dois jobs independentes — acorda o Streamlit (Playwright, sem `networkidle`) e faz um **ping direto no Supabase** (via SQLAlchemy) para evitar a hibernação do banco (free tier pausa após ~7 dias).
+- **Sync self-healing:** antes de gerar um novo relatório, o serviço reaproveita um relatório do mesmo período já existente no Mercado Pago — evita relatórios duplicados acumulados e coleta automaticamente relatórios que ficaram presos em `pending` quando a fila do MP está lenta. Readiness passou a ser detectada por `file_name` (robusto a novos status como `PENDING-YUL`); timeout de polling ampliado para 900s.
+- **Chunking no sync manual:** períodos personalizados >60 dias são divididos automaticamente em blocos de até 60 dias (limite da API do MP), em vez de falhar.
+
+**Segurança**
+- **Row Level Security (RLS)** habilitado em todas as tabelas do Supabase.
+
+**Mobile / UX**
+- **Ícone PWA personalizado:** o atalho "Adicionar à tela de início" passa a usar o ícone do Wolf Wallet (🐺) em vez do padrão do Streamlit Cloud. Implementado via `apple-touch-icon` + web manifest servidos pela pasta `static/` (`enableStaticServing`) e injetados no documento mais externo (`window.top`) — necessário por causa do iframe aninhado do Community Cloud.
+- **Crédito do desenvolvedor** no rodapé (login e sidebar).
+
+### v1.2.0
+- Sync inclusivo (recaptura transações tardias), banner de status da sync, chunked sync >60 dias, keep-alive otimizado.
+
+### v1.1.0
+- Mobile UX, cookie session persistente, correções do sidebar, keep-alive action.
+
+---
+
+*Feito com ❤️ por [Matheus Gualter S. Resende](https://github.com/MatheuxGualter)*
