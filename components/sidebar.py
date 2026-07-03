@@ -109,6 +109,7 @@ def _render_navigation() -> str:
         nav_items.update({
             f"{UI.ICONS['admin_usuarios']} Usuários": Pages.ADMIN_USUARIOS,
             f"{UI.ICONS['admin_sync']} Sincronização": Pages.ADMIN_SYNC,
+            f"{UI.ICONS['admin_auditoria']} Auditoria": Pages.ADMIN_AUDITORIA,
         })
 
     # Determina o index atual

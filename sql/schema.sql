@@ -217,6 +217,33 @@ COMMENT ON COLUMN sync_log.end_date IS 'Fim do período consultado na API';
 
 
 -- =============================================
+-- 7. ACCESS_LOG — Auditoria de acessos
+-- =============================================
+-- Registra cada acesso ao sistema (1 evento por sessão): login de membro
+-- ou entrada no modo visitante. Usado para análises de uso: quem mais
+-- acessa, volume de acessos de visitantes, acessos ao longo do tempo.
+-- Não armazena IP nem user-agent (privacidade).
+
+CREATE TABLE IF NOT EXISTS access_log (
+    id              BIGSERIAL       PRIMARY KEY,
+    event_type      VARCHAR(20)     NOT NULL CHECK (event_type IN ('login', 'visitor')),
+    user_id         INTEGER         REFERENCES users(id) ON DELETE SET NULL,
+    user_email      VARCHAR(150),
+    role            VARCHAR(10),
+    created_at      TIMESTAMP       DEFAULT NOW()
+);
+
+-- Index para consultas por período (dashboard de auditoria)
+CREATE INDEX IF NOT EXISTS idx_access_log_created ON access_log (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_access_log_event ON access_log (event_type);
+
+COMMENT ON TABLE  access_log IS 'Auditoria de acessos — 1 evento por sessão (login de membro ou visitante)';
+COMMENT ON COLUMN access_log.event_type IS 'login = membro autenticado; visitor = modo demo';
+COMMENT ON COLUMN access_log.user_email IS 'Snapshot do email (sobrevive à remoção do usuário)';
+
+
+
+-- =============================================
 -- TRIGGER: Atualizar updated_at automaticamente
 -- =============================================
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -248,6 +275,7 @@ ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE monthly_bills ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bill_payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sync_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE access_log ENABLE ROW LEVEL SECURITY;
 
 -- 2. Sem policies = nenhum acesso via API REST (anon/authenticated)
 -- A conexão direta (role postgres) bypassa RLS, então o app continua funcionando.

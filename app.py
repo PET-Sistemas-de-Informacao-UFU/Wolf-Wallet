@@ -30,6 +30,7 @@ from components.pwa_icons import inject_pwa_icons
 from config.settings import App, Pages, SessionKeys, UI
 from pages.admin_sync import render_admin_sync
 from pages.admin_usuarios import render_admin_usuarios
+from pages.admin_auditoria import render_admin_auditoria
 from pages.contas import render_contas
 from pages.extrato import render_extrato
 from pages.home import render_home
@@ -81,6 +82,7 @@ PAGE_RENDERERS: dict = {
     Pages.CONTAS: render_contas,
     Pages.ADMIN_SYNC: render_admin_sync,
     Pages.ADMIN_USUARIOS: render_admin_usuarios,
+    Pages.ADMIN_AUDITORIA: render_admin_auditoria,
 }
 
 

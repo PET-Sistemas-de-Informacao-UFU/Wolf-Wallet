@@ -80,6 +80,31 @@ def login_user(user: dict) -> None:
     except Exception:
         pass  # Cookie é best-effort
 
+    # Auditoria: registra o acesso uma vez por sessão
+    _log_access_once(
+        "login",
+        user_id=user["id"],
+        user_email=user.get("email"),
+        role=user.get("role"),
+    )
+
+
+def _log_access_once(
+    event_type: str,
+    user_id: int | None = None,
+    user_email: str | None = None,
+    role: str | None = None,
+) -> None:
+    """Registra um acesso no access_log no máximo uma vez por sessão (best-effort)."""
+    if st.session_state.get(SessionKeys.ACCESS_LOGGED):
+        return
+    try:
+        from models.access_log import log_access
+        log_access(event_type, user_id=user_id, user_email=user_email, role=role)
+        st.session_state[SessionKeys.ACCESS_LOGGED] = True
+    except Exception:
+        pass  # Auditoria nunca deve quebrar o acesso
+
 
 def login_visitor() -> None:
     """Registra o acesso como visitante (modo demo)."""
@@ -88,6 +113,9 @@ def login_visitor() -> None:
     st.session_state[SessionKeys.USER] = None
     st.session_state[SessionKeys.ROLE] = None
     st.session_state[SessionKeys.CURRENT_PAGE] = Pages.HOME
+
+    # Auditoria: registra a sessão de visitante uma vez
+    _log_access_once("visitor")
 
 
 def logout_user() -> None:

@@ -128,6 +128,7 @@ class UI:
         "contas": "💳",
         "admin_usuarios": "👤",
         "admin_sync": "🔄",
+        "admin_auditoria": "📊",
         "saldo": "💰",
         "entradas": "📥",
         "saidas": "📤",
@@ -291,6 +292,7 @@ class SessionKeys:
     CURRENT_PAGE: str = "current_page"
     THEME: str = "theme"
     MUST_CHANGE_PASSWORD: str = "must_change_password"
+    ACCESS_LOGGED: str = "access_logged"
 
 
 # =============================================
@@ -306,18 +308,19 @@ class Pages:
     CONTAS: str = "contas"
     ADMIN_USUARIOS: str = "admin_usuarios"
     ADMIN_SYNC: str = "admin_sync"
+    ADMIN_AUDITORIA: str = "admin_auditoria"
 
     # Páginas acessíveis por visitantes
     VISITOR_PAGES: list[str] = [HOME]
 
     # Páginas que requerem admin
-    ADMIN_PAGES: list[str] = [ADMIN_USUARIOS, ADMIN_SYNC]
+    ADMIN_PAGES: list[str] = [ADMIN_USUARIOS, ADMIN_SYNC, ADMIN_AUDITORIA]
 
     # Todas as páginas que requerem login
     AUTH_PAGES: list[str] = [
         HOME, EXTRATO, RENDIMENTOS,
         CONTAS,
-        ADMIN_USUARIOS, ADMIN_SYNC,
+        ADMIN_USUARIOS, ADMIN_SYNC, ADMIN_AUDITORIA,
     ]
 
 
