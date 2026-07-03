@@ -49,3 +49,6 @@ Desktop.ini
 .pytest_cache/
 htmlcov/
 .coverage
+
+# ---- Outros ----
+project
