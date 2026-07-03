@@ -18,7 +18,7 @@ from __future__ import annotations
 import io
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import requests
@@ -242,6 +242,77 @@ class MercadoPagoClient:
                 return report
         return None
 
+    @staticmethod
+    def _report_brt_date(iso_str: str | None):
+        """Converte um timestamp ISO (UTC) do relatório para a data em BRT (UTC-3)."""
+        if not iso_str:
+            return None
+        try:
+            dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+            return (dt - timedelta(hours=3)).date()
+        except Exception:
+            return None
+
+    def find_report_by_period(
+        self,
+        begin_date: datetime,
+        end_date: datetime,
+        max_age_hours: int = 6,
+    ) -> dict | None:
+        """
+        Procura um relatório existente que cubra o mesmo período (dia a dia).
+
+        Serve para dois objetivos:
+            1. Evitar gerar relatórios duplicados a cada retry (o MP acumula
+               relatórios "pending" quando está lento).
+            2. Self-healing: coletar um relatório gerado numa execução anterior
+               que ficou preso em "pending" e só ficou pronto depois.
+
+        O MP normaliza begin/end para dias inteiros (BRT), então o casamento
+        é feito por data (ignora hora). Relatórios em erro são descartados.
+
+        Args:
+            begin_date: Início do período solicitado.
+            end_date: Fim do período solicitado.
+            max_age_hours: Só considera relatórios criados nas últimas N horas
+                (limita a "idade" do snapshot reaproveitado).
+
+        Returns:
+            O relatório mais recente que casa com o período, ou None.
+        """
+        target_begin = begin_date.date()
+        target_end = end_date.date()
+        now_utc = datetime.now(timezone.utc)
+
+        candidates: list[tuple[datetime, dict]] = []
+        for report in self.list_reports():
+            status = (report.get("status") or "").lower()
+            if status in ("error", "failed"):
+                continue
+
+            if self._report_brt_date(report.get("begin_date")) != target_begin:
+                continue
+            if self._report_brt_date(report.get("end_date")) != target_end:
+                continue
+
+            created_raw = report.get("date_created")
+            try:
+                created_dt = datetime.fromisoformat(str(created_raw).replace("Z", "+00:00"))
+            except Exception:
+                continue
+
+            if now_utc - created_dt > timedelta(hours=max_age_hours):
+                continue
+
+            candidates.append((created_dt, report))
+
+        if not candidates:
+            return None
+
+        # Mais recente primeiro
+        candidates.sort(key=lambda c: c[0], reverse=True)
+        return candidates[0][1]
+
     def download_report(self, file_name: str) -> str:
         """
         Baixa o conteúdo CSV de um relatório.
@@ -283,11 +354,14 @@ class MercadoPagoClient:
 
                 logger.info(f"  [{elapsed}s] status={status}, file_name={file_name}")
 
-                if status in ("ready", "processed") and file_name:
+                # Readiness robusto: file_name preenchido = relatório pronto,
+                # independentemente do rótulo de status (o MP usa variações como
+                # "pending", "PENDING-YUL", "processed", "ready", etc.).
+                if file_name:
                     logger.info(f"Relatório pronto após {elapsed}s: {file_name} (status={status})")
                     return file_name
 
-                if status in ("error", "failed"):
+                if str(status).lower() in ("error", "failed"):
                     logger.error(f"Relatório com erro de processamento (status={status}).")
                     return None
             else:

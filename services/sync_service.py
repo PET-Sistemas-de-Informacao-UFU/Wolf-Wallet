@@ -85,25 +85,50 @@ def sync_transactions(
         _progress("🔗 Conectando à API do Mercado Pago...")
         client = get_client()
 
-        # 2. Gera relatório
-        _progress(f"📊 Gerando relatório: {begin_date.strftime('%d/%m/%Y')} → {end_date.strftime('%d/%m/%Y')}...")
-        result = client.generate_report(begin_date, end_date)
+        # 2. Reaproveita relatório existente do período, se houver.
+        #    Evita gerar relatórios duplicados a cada retry e permite coletar
+        #    um relatório que ficou preso em "pending" numa execução anterior
+        #    (self-healing quando a fila do Mercado Pago está lenta).
+        existing = client.find_report_by_period(begin_date, end_date)
 
-        report_id = result.get("id")
-        if not report_id:
-            logger.warning(f"Resposta do POST sem 'id': {result}")
-            raise RuntimeError(
-                "API não retornou o ID do relatório. "
-                "Verifique se o token tem permissão para gerar relatórios."
+        if existing and existing.get("file_name"):
+            report_id = existing.get("id")
+            _progress(f"♻️ Reaproveitando relatório já processado (id={report_id}).")
+            file_name = existing["file_name"]
+
+        elif existing:
+            report_id = existing.get("id")
+            _progress(
+                f"⏳ Relatório do período já em processamento (id={report_id}) — "
+                f"aguardando ficar pronto..."
             )
+            file_name = client.wait_for_report_ready(report_id)
 
-        # 3. Aguarda processamento (polling por ID até file_name aparecer)
-        _progress(f"⏳ Aguardando processamento (id={report_id})...")
-        file_name = client.wait_for_report_ready(report_id)
+        else:
+            # Gera um novo relatório
+            _progress(
+                f"📊 Gerando relatório: {begin_date.strftime('%d/%m/%Y')} → "
+                f"{end_date.strftime('%d/%m/%Y')}..."
+            )
+            result = client.generate_report(begin_date, end_date)
+
+            report_id = result.get("id")
+            if not report_id:
+                logger.warning(f"Resposta do POST sem 'id': {result}")
+                raise RuntimeError(
+                    "API não retornou o ID do relatório. "
+                    "Verifique se o token tem permissão para gerar relatórios."
+                )
+
+            # 3. Aguarda processamento (polling por ID até file_name aparecer)
+            _progress(f"⏳ Aguardando processamento (id={report_id})...")
+            file_name = client.wait_for_report_ready(report_id)
 
         if not file_name:
             raise RuntimeError(
-                f"Relatório id={report_id} não ficou pronto em {MPConfig.POLL_MAX_WAIT_SECONDS}s."
+                f"Relatório id={report_id} não ficou pronto em {MPConfig.POLL_MAX_WAIT_SECONDS}s. "
+                f"Ele continua sendo processado no Mercado Pago e será coletado "
+                f"automaticamente na próxima sincronização."
             )
 
         # 4. Baixa o CSV

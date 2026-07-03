@@ -183,9 +183,12 @@ class MercadoPago:
     MAX_RETRIES: int = 3
     RETRY_BACKOFF_FACTOR: float = 2.0
 
-    # Polling para aguardar processamento do relatório
-    POLL_INTERVAL_SECONDS: int = 10
-    POLL_MAX_WAIT_SECONDS: int = 600  # 10 minutos
+    # Polling para aguardar processamento do relatório.
+    # O MP pode demorar bastante quando está lento; se estourar, a sync é
+    # self-healing (o relatório continua processando e é coletado na próxima
+    # execução, sem gerar um novo relatório duplicado).
+    POLL_INTERVAL_SECONDS: int = 15
+    POLL_MAX_WAIT_SECONDS: int = 900  # 15 minutos
 
     # Configuração do relatório
     FILE_NAME_PREFIX: str = "extrato-projeto"
