@@ -26,6 +26,7 @@ from auth.session import (
 )
 from components.sidebar import render_sidebar
 from components.mobile_css import inject_mobile_css
+from components.pwa_icons import inject_pwa_icons
 from config.settings import App, Pages, SessionKeys, UI
 from pages.admin_sync import render_admin_sync
 from pages.admin_usuarios import render_admin_usuarios
@@ -50,6 +51,9 @@ st.set_page_config(
 
 # CSS responsivo para mobile (deve vir logo após set_page_config)
 inject_mobile_css()
+
+# Ícone personalizado do atalho mobile (sobrescreve o padrão do Streamlit Cloud)
+inject_pwa_icons(App.TITLE)
 
 
 # =============================================

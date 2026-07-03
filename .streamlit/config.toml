@@ -8,6 +8,7 @@ font = "sans serif"
 [server]
 headless = true
 runOnSave = true
+enableStaticServing = true
 
 [browser]
 gatherUsageStats = false
