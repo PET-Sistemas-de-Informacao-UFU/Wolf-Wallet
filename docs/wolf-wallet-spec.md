@@ -190,6 +190,20 @@ CREATE TABLE sync_log (
 );
 ```
 
+#### `access_log` — Auditoria de acessos (v1.3.1)
+```sql
+CREATE TABLE access_log (
+    id BIGSERIAL PRIMARY KEY,
+    event_type VARCHAR(20) CHECK (event_type IN ('login', 'visitor')),
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,  -- NULL p/ visitante
+    user_email VARCHAR(150),   -- snapshot (sobrevive à remoção do usuário)
+    role VARCHAR(10),
+    created_at TIMESTAMP DEFAULT NOW()
+);
+```
+> Registra **1 evento por sessão** (login de membro ou entrada como visitante).
+> Não armazena IP nem user-agent (privacidade).
+
 ---
 
 ## 6. API do Mercado Pago — Integração
@@ -480,6 +494,22 @@ Tela de Login
 
 ---
 
+### 8.9 Painel de Auditoria (`/admin/auditoria`) (v1.3.1)
+
+**Acesso:** Somente Admin
+
+| Funcionalidade | Descrição |
+|---|---|
+| **Cards** | Total de acessos, logins de membros, visitantes e membros únicos no período |
+| **Ranking** | Quem mais acessa (por email), apenas eventos de login |
+| **Série temporal** | Gráfico de acessos por dia (membros x visitantes) |
+| **Últimos acessos** | Tabela com os acessos mais recentes |
+| **Período** | Seletor 7 / 30 / 90 / 365 dias |
+
+> Alimentado pela tabela `access_log` (1 evento por sessão). Sem IP/user-agent.
+
+---
+
 ## 9. Dados Mockados (Modo Visitante)
 
 O modo visitante deve exibir o dashboard completo com dados fictícios para fins de demonstração. Os dados mockados devem:
@@ -544,7 +574,8 @@ wolf-wallet/
 │   ├── rendimentos.py         # Tela de rendimentos
 │   ├── contas.py              # Contas mensais
 │   ├── admin_usuarios.py      # Gerenciamento de usuários (admin)
-│   └── admin_sync.py          # Painel de sincronização (admin)
+│   ├── admin_sync.py          # Painel de sincronização (admin)
+│   └── admin_auditoria.py     # Painel de auditoria de acessos (admin)
 │
 ├── services/
 │   ├── mercadopago.py         # Integração com API do Mercado Pago
@@ -557,7 +588,8 @@ wolf-wallet/
 │   ├── user.py                # CRUD de usuários
 │   ├── transaction.py         # CRUD de transações
 │   ├── bill.py                # CRUD de contas mensais
-│   └── sync_log.py            # CRUD de logs de sync
+│   ├── sync_log.py            # CRUD de logs de sync
+│   └── access_log.py          # CRUD de auditoria de acessos
 │
 ├── components/
 │   ├── sidebar.py             # Sidebar de navegação
@@ -567,10 +599,16 @@ wolf-wallet/
 │   ├── transaction_table.py   # Tabela de transações estilizada
 │   ├── hide_balance.py        # Componente de ocultar saldo
 │   ├── sync_status.py         # Banner de status da sincronização
-│   └── mobile_css.py          # CSS responsivo para mobile
+│   ├── mobile_css.py          # CSS responsivo para mobile
+│   └── pwa_icons.py           # Ícone/splash do PWA (apple-touch-icon, manifest, pwacompat)
 │
 ├── mock/
 │   └── mock_data.py           # Dados fictícios para modo visitante
+│
+├── static/                    # Servido pelo app (enableStaticServing)
+│   ├── manifest.json          # Web manifest do PWA
+│   ├── icon-192.png / icon-512.png / apple-touch-icon.png
+│   └── pwacompat.min.js       # Gera a splash do iOS a partir do manifest
 │
 ├── sql/
 │   └── schema.sql             # Script de criação das tabelas
@@ -682,7 +720,11 @@ JWT_SECRET = "chave-secreta-aleatoria"
 
 ## 16. Histórico de Versões (Changelog)
 
-### v1.3.0 (atual)
+### v1.3.1 (atual)
+- **Auditoria de acessos:** nova aba admin 📊 com ranking de quem mais acessa, contagem de visitantes, série temporal (membros x visitantes) e últimos acessos. Alimentada pela tabela `access_log` (1 evento por sessão; sem IP).
+- **Splash screen do PWA no iOS:** integração do `pwacompat` (vendorado em `static/`) que gera as `apple-touch-startup-image` a partir do manifest — elimina a tela branca ao abrir o atalho no iPhone. No Android a splash já vinha do manifest.
+
+### v1.3.0
 **Infraestrutura & confiabilidade**
 - **Keep-alive robusto:** GitHub Action a cada 6h com dois jobs independentes — acorda o Streamlit (Playwright, sem `networkidle`) e faz um **ping direto no Supabase** (via SQLAlchemy) para evitar a hibernação do banco (free tier pausa após ~7 dias).
 - **Sync self-healing:** antes de gerar um novo relatório, o serviço reaproveita um relatório do mesmo período já existente no Mercado Pago — evita relatórios duplicados acumulados e coleta automaticamente relatórios que ficaram presos em `pending` quando a fila do MP está lenta. Readiness passou a ser detectada por `file_name` (robusto a novos status como `PENDING-YUL`); timeout de polling ampliado para 900s.

@@ -164,6 +164,7 @@ wolf-wallet/
 - [x] **v1.1.0** — Mobile UX, cookie session persistente, sidebar fixes, keep-alive action
 - [x] **v1.2.0** — Sync inclusivo (recaptura transações tardias), banner de status da sync, chunked sync >60 dias, keep-alive otimizado (3 dias)
 - [x] **v1.3.0** — Keep-alive robusto (wake do Streamlit + ping direto no Supabase), sync self-healing (reaproveita relatórios do Mercado Pago), chunking no sync manual, ícone PWA personalizado no atalho mobile, RLS habilitado no banco
+- [x] **v1.3.1** — Auditoria de acessos (aba admin: ranking de quem mais acessa, visitantes, série temporal) e splash screen do PWA no iOS via pwacompat (fim da tela branca)
 
 ---
 
