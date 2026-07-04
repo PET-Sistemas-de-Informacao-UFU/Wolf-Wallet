@@ -80,28 +80,52 @@ def bar_chart_inflows_outflows(df: pd.DataFrame) -> go.Figure:
         else:
             labels.append(str(m))
 
+    inflows = df["inflows"].astype(float)
+    outflows = df["outflows"].astype(float)
+    if "opening_balance" in df.columns:
+        opening = df["opening_balance"].astype(float).clip(lower=0)
+    else:
+        opening = inflows * 0  # série de zeros do mesmo tamanho
+
+    # Barra "Disponível" = Entradas (verde) + Caixa inicial (azul) empilhados.
+    # Mostra que, mesmo gastando mais do que entrou no mês, havia caixa acumulado.
     fig.add_trace(go.Bar(
         name="Entradas",
         x=labels,
-        y=df["inflows"].astype(float),
+        y=inflows,
         marker_color=Colors.POSITIVE,
         marker_line_width=0,
+        offsetgroup="disponivel",
+        legendgroup="disponivel",
         hovertemplate="Entradas: R$ %{y:,.2f}<extra></extra>",
     ))
 
     fig.add_trace(go.Bar(
+        name="Caixa na virada",
+        x=labels,
+        y=opening,
+        marker_color=Colors.NEUTRAL,
+        marker_line_width=0,
+        offsetgroup="disponivel",
+        legendgroup="disponivel",
+        hovertemplate="Caixa na virada do mês: R$ %{y:,.2f}<extra></extra>",
+    ))
+
+    # Saídas (vermelho) — barra própria, ao lado da barra "Disponível".
+    fig.add_trace(go.Bar(
         name="Saídas",
         x=labels,
-        y=df["outflows"].astype(float),
+        y=outflows,
         marker_color=Colors.NEGATIVE,
         marker_line_width=0,
+        offsetgroup="saidas",
+        legendgroup="saidas",
         hovertemplate="Saídas: R$ %{y:,.2f}<extra></extra>",
     ))
 
-    layout = _base_layout("Entradas vs Saídas")
-    layout["barmode"] = "group"
-    layout["bargap"] = 0.2
-    layout["bargroupgap"] = 0.1
+    layout = _base_layout("Entradas + caixa vs Saídas")
+    layout["barmode"] = "relative"
+    layout["bargap"] = 0.25
     fig.update_layout(**layout)
 
     return fig

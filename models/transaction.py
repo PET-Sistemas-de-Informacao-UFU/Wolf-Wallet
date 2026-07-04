@@ -302,28 +302,48 @@ def get_monthly_chart_data(months: int = 12) -> pd.DataFrame:
     """
     Dados agrupados por mês para gráfico de barras (entradas vs saídas).
 
+    Inclui `opening_balance`: o caixa acumulado (soma líquida de todas as
+    transações) na virada do mês — ou seja, quanto já havia em caixa ANTES
+    das entradas/saídas daquele mês. Isso evita a distorção visual de
+    "gastar mais do que arrecadou" quando havia caixa acumulado.
+
     Args:
-        months: Quantidade de meses para trás.
+        months: Quantidade de meses (mais recentes) a retornar. O saldo de
+            abertura é calculado sobre TODO o histórico, independente disso.
 
     Returns:
-        DataFrame com colunas: month, inflows, outflows.
+        DataFrame com colunas: month, inflows, outflows, opening_balance.
     """
     rows = execute_query(
-        "SELECT "
-        "  TO_CHAR(transaction_date, 'YYYY-MM') as month, "
-        "  COALESCE(SUM(CASE WHEN transaction_amount > 0 THEN transaction_amount ELSE 0 END), 0) as inflows, "
-        "  COALESCE(SUM(CASE WHEN transaction_amount < 0 THEN ABS(transaction_amount) ELSE 0 END), 0) as outflows "
-        "FROM transactions "
-        "WHERE transaction_date >= NOW() - make_interval(months => :months) "
-        "GROUP BY TO_CHAR(transaction_date, 'YYYY-MM') "
-        "ORDER BY month",
+        "WITH monthly AS ("
+        "  SELECT "
+        "    TO_CHAR(transaction_date, 'YYYY-MM') AS month, "
+        "    COALESCE(SUM(CASE WHEN transaction_amount > 0 THEN transaction_amount ELSE 0 END), 0) AS inflows, "
+        "    COALESCE(SUM(CASE WHEN transaction_amount < 0 THEN ABS(transaction_amount) ELSE 0 END), 0) AS outflows, "
+        "    COALESCE(SUM(settlement_net_amount), 0) AS net_month "
+        "  FROM transactions "
+        "  GROUP BY TO_CHAR(transaction_date, 'YYYY-MM') "
+        "), cumulative AS ("
+        "  SELECT month, inflows, outflows, "
+        "    COALESCE("
+        "      SUM(net_month) OVER (ORDER BY month ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0"
+        "    ) AS opening_balance "
+        "  FROM monthly "
+        ") "
+        "SELECT month, inflows, outflows, opening_balance "
+        "FROM cumulative "
+        "ORDER BY month DESC "
+        "LIMIT :months",
         {"months": months},
     )
 
     if not rows:
-        return pd.DataFrame(columns=["month", "inflows", "outflows"])
+        return pd.DataFrame(columns=["month", "inflows", "outflows", "opening_balance"])
 
-    return pd.DataFrame(rows)
+    # A query retorna do mais recente ao mais antigo (por causa do LIMIT);
+    # inverte para ordem cronológica ascendente para o gráfico.
+    df = pd.DataFrame(rows).iloc[::-1].reset_index(drop=True)
+    return df
 
 
 # Métodos de pagamento de cartão de crédito — excluídos da importação.

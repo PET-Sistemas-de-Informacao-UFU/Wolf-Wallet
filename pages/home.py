@@ -85,7 +85,7 @@ def _load_data() -> dict:
         inflows = get_monthly_inflows(today.year, today.month)
         outflows = get_monthly_outflows(today.year, today.month)
         yields = get_monthly_yields(today.year, today.month)
-        chart_data = get_monthly_chart_data(months=6)
+        chart_data = get_monthly_chart_data(months=12)
         transactions = get_recent_transactions(limit=UI.RECENT_ACTIVITIES_LIMIT)
         upcoming_bills = get_upcoming_bills()
 
@@ -110,7 +110,7 @@ def _load_data() -> dict:
             "inflows": 0,
             "outflows": 0,
             "yields": 0,
-            "chart_data": pd.DataFrame(columns=["month", "inflows", "outflows"]),
+            "chart_data": pd.DataFrame(columns=["month", "inflows", "outflows", "opening_balance"]),
             "transactions": [],
             "upcoming_bills": [],
         }

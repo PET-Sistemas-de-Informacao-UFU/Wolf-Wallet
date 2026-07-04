@@ -723,6 +723,7 @@ JWT_SECRET = "chave-secreta-aleatoria"
 ### v1.3.1 (atual)
 - **Auditoria de acessos:** nova aba admin 📊 com ranking de quem mais acessa, contagem de visitantes, série temporal (membros x visitantes) e últimos acessos. Alimentada pela tabela `access_log` (1 evento por sessão; sem IP).
 - **Splash screen do PWA no iOS:** integração do `pwacompat` (vendorado em `static/`) que gera as `apple-touch-startup-image` a partir do manifest — elimina a tela branca ao abrir o atalho no iPhone. No Android a splash já vinha do manifest.
+- **Caixa na virada do mês (gráfico da home):** o gráfico de barras agora empilha uma barra azul ("Caixa na virada") sobre a verde ("Entradas"), mostrando o caixa acumulado no início do mês ao lado das saídas. Elimina a distorção visual de parecer que houve dívida quando as saídas superam as entradas mas havia caixa acumulado. O saldo de abertura é calculado sobre todo o histórico via window function.
 
 ### v1.3.0
 **Infraestrutura & confiabilidade**

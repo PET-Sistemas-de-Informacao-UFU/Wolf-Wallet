@@ -212,22 +212,33 @@ def get_mock_dashboard_data() -> dict:
 
 
 def _build_mock_chart_data(transactions: list[dict]) -> pd.DataFrame:
-    """Agrupa transações por mês para o gráfico de barras."""
+    """Agrupa transações por mês para o gráfico de barras (com caixa de abertura)."""
     monthly: dict[str, dict] = {}
 
     for t in transactions:
         month_key = t["transaction_date"].strftime("%Y-%m")
         if month_key not in monthly:
-            monthly[month_key] = {"month": month_key, "inflows": 0.0, "outflows": 0.0}
+            monthly[month_key] = {"month": month_key, "inflows": 0.0, "outflows": 0.0, "net": 0.0}
 
         amount = t["transaction_amount"]
+        net = t.get("settlement_net_amount", amount)
         if amount > 0:
             monthly[month_key]["inflows"] += amount
         else:
             monthly[month_key]["outflows"] += abs(amount)
+        monthly[month_key]["net"] += net
 
     rows = sorted(monthly.values(), key=lambda x: x["month"])
-    return pd.DataFrame(rows) if rows else pd.DataFrame(columns=["month", "inflows", "outflows"])
+
+    # Caixa na virada do mês = soma líquida acumulada dos meses anteriores
+    running = 0.0
+    for r in rows:
+        r["opening_balance"] = running
+        running += r.pop("net")
+
+    if not rows:
+        return pd.DataFrame(columns=["month", "inflows", "outflows", "opening_balance"])
+    return pd.DataFrame(rows)
 
 
 def get_mock_bills() -> list[dict]:
