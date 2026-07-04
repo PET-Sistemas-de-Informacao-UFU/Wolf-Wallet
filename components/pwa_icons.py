@@ -81,6 +81,25 @@ def inject_pwa_icons(app_title: str = "Wolf Wallet") -> None:
             upsertMeta("apple-mobile-web-app-capable", "yes");
             upsertMeta("apple-mobile-web-app-status-bar-style", "black-translucent");
             upsertMeta("theme-color", "#0E1117");
+
+            // pwacompat: gera as apple-touch-startup-image (splash do iOS) a partir
+            // do manifest — elimina a tela branca ao abrir a PWA no iPhone.
+            // O Streamlit serve .js como text/plain (o browser recusa <script src>),
+            // então buscamos o código via fetch e injetamos inline (executa e roda
+            // uma única vez por documento).
+            try {{
+              if (!window.top.__wolfPwacompat) {{
+                window.top.__wolfPwacompat = true;
+                fetch(base + "pwacompat.min.js" + V)
+                  .then(function (r) {{ return r.text(); }})
+                  .then(function (code) {{
+                    const s = doc.createElement("script");
+                    s.textContent = code;
+                    doc.head.appendChild(s);
+                  }})
+                  .catch(function () {{}});
+              }}
+            }} catch (e) {{ /* ignora */ }}
           }}
 
           function run() {{
