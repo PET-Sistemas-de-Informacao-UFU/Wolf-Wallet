@@ -83,18 +83,30 @@ def _get_database_url() -> str:
 
 def _encode_database_url(raw_url: str) -> str:
     """
-    Garante que a senha na DATABASE_URL está URL-encoded.
+    Normaliza a DATABASE_URL para o SQLAlchemy.
 
-    Caracteres especiais como *, &, / na senha podem quebrar
-    o parsing da URL pelo SQLAlchemy.
+    1. Fixa o driver como ``postgresql+psycopg2`` (psycopg2-binary).
+       Versões recentes do SQLAlchemy passaram a usar o ``psycopg`` (v3)
+       como driver padrão para o esquema ``postgresql://``. Como o projeto
+       depende do ``psycopg2-binary``, deixamos o driver explícito para
+       evitar o erro ``No module named 'psycopg'`` num rebuild do ambiente.
+    2. Garante que a senha está URL-encoded — caracteres especiais como
+       ``*``, ``&`` ou ``/`` podem quebrar o parsing da URL.
 
     Args:
-        raw_url: URL original (pode ter senha não-encoded).
+        raw_url: URL original (pode ter esquema/driver variável e senha não-encoded).
 
     Returns:
-        URL com senha devidamente encoded.
+        URL normalizada com driver explícito e senha encoded.
     """
     parsed = urlparse(raw_url)
+
+    # 1. Força o driver psycopg2 para qualquer variação de esquema Postgres
+    #    (postgres://, postgresql://, postgresql+psycopg://, ...).
+    if parsed.scheme.startswith("postgres"):
+        parsed = parsed._replace(scheme="postgresql+psycopg2")
+
+    # 2. URL-encode da senha, se houver.
     if parsed.password:
         encoded_password = quote_plus(parsed.password)
         # Reconstrói netloc: user:encoded_pass@host:port
@@ -102,8 +114,9 @@ def _encode_database_url(raw_url: str) -> str:
             netloc = f"{parsed.username}:{encoded_password}@{parsed.hostname}:{parsed.port}"
         else:
             netloc = f"{parsed.username}:{encoded_password}@{parsed.hostname}"
-        return urlunparse(parsed._replace(netloc=netloc))
-    return raw_url
+        parsed = parsed._replace(netloc=netloc)
+
+    return urlunparse(parsed)
 
 
 def get_engine() -> Engine:
