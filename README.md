@@ -165,6 +165,7 @@ wolf-wallet/
 - [x] **v1.2.0** — Sync inclusivo (recaptura transações tardias), banner de status da sync, chunked sync >60 dias, keep-alive otimizado (3 dias)
 - [x] **v1.3.0** — Keep-alive robusto (wake do Streamlit + ping direto no Supabase), sync self-healing (reaproveita relatórios do Mercado Pago), chunking no sync manual, ícone PWA personalizado no atalho mobile, RLS habilitado no banco
 - [x] **v1.3.1** — Auditoria de acessos (aba admin: ranking de quem mais acessa, visitantes, série temporal); splash screen do PWA no iOS via pwacompat (fim da tela branca); e caixa na virada do mês no gráfico da home (barra azul empilhada, evita a distorção de "gastar mais do que arrecadou")
+- [x] **v1.3.2** — Keep-alive confiável: wake do Streamlit realmente acorda o app hibernado (e falha o job quando não consegue), ping do Supabase corrigido para o SQLAlchemy 2.1, cron a cada 3 h; sync mais rápida e resiliente (log antes do enriquecimento, enriquecimento só das novas, trava com expiração, prazo por relógio real) e fuso horário correto nas requisições ao Mercado Pago
 
 ---
 

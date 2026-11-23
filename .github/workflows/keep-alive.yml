@@ -2,11 +2,15 @@ name: 🐺 Keep Alive + Sync
 
 on:
   schedule:
-    # A cada 6 horas (00:00, 06:00, 12:00, 18:00 UTC).
-    # Streamlit Community Cloud hiberna após ~12h SEM tráfego —
-    # o intervalo de 6h garante que nunca atinge esse limite.
+    # A cada 3 horas, no minuto 17 (00:17, 03:17, 06:17, ... UTC).
+    # Streamlit Community Cloud hiberna após ~12h SEM tráfego. O cron do
+    # GitHub Actions não é pontual: no histórico do projeto, as execuções
+    # atrasaram 2,5 h em mediana (até ~6 h) e algumas foram puladas, deixando
+    # intervalos de até 14,6 h com o cron anterior de 6 h. Com 3 h há folga
+    # para absorver atrasos e execuções perdidas. O minuto 17 evita o pico de
+    # carga do GitHub na hora cheia, quando os atrasos são maiores.
     # Ao acordar o app (cold start), a auto-sync é disparada automaticamente.
-    - cron: "0 */6 * * *"
+    - cron: "17 */3 * * *"
   workflow_dispatch: # permite rodar manualmente pelo GitHub
 
 # Evita execuções sobrepostas (ex.: manual + agendada ao mesmo tempo)
@@ -22,10 +26,11 @@ jobs:
   # -------------------------------------------------------------------
   keep-supabase-alive:
     name: Ping Supabase (evita hibernação)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -48,9 +53,15 @@ jobs:
           python - <<'PY'
           import os, sys
           from sqlalchemy import create_engine, text
+          from sqlalchemy.engine import make_url
 
-          url = os.environ["DATABASE_URL"]
           try:
+              # Fixa o driver psycopg2. A partir do SQLAlchemy 2.1 o esquema
+              # "postgresql://" usa o psycopg (v3) por padrão, que não está
+              # instalado aqui — causa de todas as falhas deste job desde
+              # 24/09/2026 ("No module named 'psycopg'"). Mesma correção
+              # aplicada ao app em config/database.py.
+              url = make_url(os.environ["DATABASE_URL"]).set(drivername="postgresql+psycopg2")
               engine = create_engine(url, pool_pre_ping=True)
               with engine.connect() as conn:
                   conn.execute(text("SELECT 1"))
@@ -69,12 +80,13 @@ jobs:
   # -------------------------------------------------------------------
   wake-streamlit:
     name: Acordar Streamlit + disparar sync
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
 
       - name: Install Playwright
         run: |
@@ -88,86 +100,135 @@ jobs:
           import { chromium } from 'playwright';
 
           const APP_URL = 'https://wolf-wallet.streamlit.app/';
-          const NAV_TIMEOUT = 120_000;   // 2 min — cold start do Streamlit é lento
-          const APP_READY_TIMEOUT = 90_000;
-          const STABILIZE_MS = 30_000;   // tempo p/ WebSocket conectar e main() rodar (dispara sync)
+          const NAV_TIMEOUT = 120_000;     // carregamento da página externa
+          const DETECT_TIMEOUT = 90_000;   // tempo para decidir: dormindo ou acordado
+          const BOOT_TIMEOUT = 360_000;    // cold start após o clique (pode levar minutos)
+          const RENDER_TIMEOUT = 90_000;   // tempo para o script do app renderizar a tela
+          const STABILIZE_MS = 45_000;     // mantém a sessão aberta p/ main() disparar a sync
+
+          // Botão da página de hibernação do Streamlit Cloud. O rótulo já mudou
+          // algumas vezes; por isso há mais de uma variação.
+          const WAKE_SELECTOR = [
+            'button:has-text("get this app back up")',
+            'button:has-text("back up")',
+            '[data-testid="wakeup-button-viewer"]',
+            '[data-testid="wakeup-button-owner"]',
+          ].join(', ');
+
+          // Container do app. No Community Cloud o app roda DENTRO de um iframe
+          // (/~/+/); procurar no documento principal nunca o encontra — por isso
+          // a versão anterior sempre esperava o tempo máximo e seguia "às cegas".
+          const APP_SELECTOR = '[data-testid="stApp"], [data-testid="stAppViewContainer"]';
+          // Algum conteúdo renderizado pelo script Python (tela de login, etc.):
+          // indica que main() rodou — e, com ele, o critério de sincronização.
+          const RENDERED_SELECTOR =
+            '[data-testid="stForm"], [data-testid="stButton"], [data-testid="stMarkdownContainer"]';
+
+          const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+          // Procura um seletor em todos os frames, exceto o documento principal.
+          async function countInAppFrames(page, selector) {
+            let total = 0;
+            for (const frame of page.frames()) {
+              if (frame === page.mainFrame()) continue;
+              total += await frame.locator(selector).count().catch(() => 0);
+            }
+            return total;
+          }
+
+          async function wakeButtonVisible(page) {
+            return page.locator(WAKE_SELECTOR).first().isVisible().catch(() => false);
+          }
+
+          // Aguarda até que a página indique um estado conhecido.
+          // NOTA: locator.isVisible() NÃO espera (a opção timeout é ignorada
+          // pelo Playwright). A versão anterior consultava o botão logo após o
+          // 'domcontentloaded', antes de ele ser desenhado, concluía "já estava
+          // acordado" e nunca clicava — o app continuava hibernado.
+          async function detectState(page, timeoutMs) {
+            const deadline = Date.now() + timeoutMs;
+            while (Date.now() < deadline) {
+              if (await wakeButtonVisible(page)) return 'sleeping';
+              if ((await countInAppFrames(page, APP_SELECTOR)) > 0) return 'awake';
+              await sleep(2_000);
+            }
+            return 'unknown';
+          }
+
+          async function waitFor(page, selector, timeoutMs) {
+            const deadline = Date.now() + timeoutMs;
+            while (Date.now() < deadline) {
+              if ((await countInAppFrames(page, selector)) > 0) return true;
+              await sleep(3_000);
+            }
+            return false;
+          }
 
           (async () => {
             const browser = await chromium.launch();
             const page = await browser.newPage();
             page.setDefaultTimeout(NAV_TIMEOUT);
+            let ok = false;
 
             console.log('🐺 Abrindo Wolf Wallet no headless browser...');
-
             try {
-              // 1. Navega para o app.
-              //    IMPORTANTE: NÃO usar 'networkidle' — o Streamlit mantém um
-              //    WebSocket aberto + health-checks periódicos, então o
-              //    'networkidle' quase nunca estabiliza e o goto estoura timeout.
+              // NÃO usar 'networkidle': o Streamlit mantém um WebSocket aberto.
               const response = await page.goto(APP_URL, {
                 waitUntil: 'domcontentloaded',
                 timeout: NAV_TIMEOUT,
               });
               console.log(`➡️  Status HTTP: ${response?.status()}`);
 
-              // 2. Se o app está dormindo, clica no botão de acordar.
-              //    O rótulo do botão já mudou algumas vezes; tentamos várias variações.
-              const wakeSelectors = [
-                'button:has-text("get this app back up")',
-                'button:has-text("Yes, get this app back up")',
-                'button:has-text("back up")',
-                '[data-testid="wakeup-button-viewer"]',
-              ];
+              let state = await detectState(page, DETECT_TIMEOUT);
+              if (state === 'unknown') {
+                console.log('🔁 Estado indefinido — recarregando a página uma vez...');
+                await page.reload({ waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT });
+                state = await detectState(page, DETECT_TIMEOUT);
+              }
+              console.log(`🔎 Estado detectado: ${state}`);
 
-              let clickedWake = false;
-              for (const sel of wakeSelectors) {
-                const btn = page.locator(sel).first();
-                if (await btn.isVisible({ timeout: 5000 }).catch(() => false)) {
-                  console.log(`💤 App estava dormindo — acordando (selector: ${sel})...`);
-                  await btn.click().catch(() => {});
-                  clickedWake = true;
-                  break;
+              if (state === 'sleeping') {
+                console.log('💤 App estava dormindo — clicando em "acordar"...');
+                await page.locator(WAKE_SELECTOR).first().click();
+                const booted = await waitFor(page, APP_SELECTOR, BOOT_TIMEOUT);
+                console.log(booted
+                  ? '✅ App acordou (container carregado).'
+                  : '❌ App não acordou dentro do tempo limite.');
+                state = booted ? 'awake' : 'unknown';
+              } else if (state === 'awake') {
+                console.log('✅ App já estava acordado (container encontrado no iframe).');
+              }
+
+              if (state === 'awake') {
+                const rendered = await waitFor(page, RENDERED_SELECTOR, RENDER_TIMEOUT);
+                if (rendered) {
+                  console.log('✅ Script do app executou (conteúdo renderizado).');
+                  // Mantém a sessão aberta: main() roda ensure_sync_freshness()
+                  // e, se os dados tiverem mais de 24 h, inicia a sincronização
+                  // em segundo plano no servidor.
+                  console.log(`⏳ Aguardando ${STABILIZE_MS / 1000}s com a sessão aberta...`);
+                  await page.waitForTimeout(STABILIZE_MS);
+                  ok = true;
+                } else {
+                  console.log('❌ Container presente, mas o conteúdo do app não foi renderizado.');
                 }
               }
-              if (!clickedWake) {
-                console.log('✅ App já estava acordado (nenhum botão de wake encontrado).');
-              }
-
-              // 3. Aguarda o container real do app do Streamlit aparecer.
-              //    Isso garante que houve boot de fato (e não só a página de sleep).
-              const appReady = await page
-                .locator('[data-testid="stApp"], [data-testid="stAppViewContainer"]')
-                .first()
-                .waitFor({ state: 'attached', timeout: APP_READY_TIMEOUT })
-                .then(() => true)
-                .catch(() => false);
-
-              if (appReady) {
-                console.log('✅ Container do Streamlit carregado (app acordado).');
-              } else {
-                console.log('⚠️  Container do Streamlit não apareceu no tempo esperado — seguindo mesmo assim.');
-              }
-
-              // 4. Estabiliza: dá tempo do WebSocket conectar e o main() rodar
-              //    por completo — é isso que dispara a auto-sync e o ping ao banco.
-              console.log(`⏳ Aguardando ${STABILIZE_MS / 1000}s para o app rodar (WebSocket + auto-sync)...`);
-              await page.waitForTimeout(STABILIZE_MS);
-
-              // 5. Screenshot p/ debug (salvo como artifact).
-              await page.screenshot({ path: 'screenshot.png', fullPage: true });
-              console.log('📸 Screenshot salvo');
-
-              const title = await page.title();
-              console.log(`📄 Título da página: "${title}"`);
-              console.log('🎉 Keep-alive concluído.');
-
             } catch (err) {
               console.error('❌ Erro:', err.message);
-              await page.screenshot({ path: 'screenshot-error.png' }).catch(() => {});
-              process.exit(1);
             } finally {
+              await page.screenshot({ path: ok ? 'screenshot.png' : 'screenshot-error.png', fullPage: true })
+                .catch(() => {});
+              console.log(`📄 Título da página: "${await page.title().catch(() => '?')}"`);
               await browser.close();
             }
+
+            if (!ok) {
+              // Falha explícita: o job fica vermelho e o GitHub notifica por
+              // e-mail, em vez de reportar sucesso com o app hibernado.
+              console.error('❌ Keep-alive NÃO confirmou o app acordado.');
+              process.exit(1);
+            }
+            console.log('🎉 Keep-alive concluído.');
           })();
           SCRIPT
 
@@ -175,7 +236,7 @@ jobs:
 
       - name: Upload screenshot (debug)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wolf-wallet-screenshot
           path: screenshot*.png

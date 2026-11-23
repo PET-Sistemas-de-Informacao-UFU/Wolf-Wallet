@@ -53,13 +53,24 @@ Um site onde todos os membros acessam o dashboard financeiro da conta em tempo r
 ```
 
 ### Fluxo de dados
-1. **Sync automática** consulta a API do Mercado Pago (1x por cold start + verificação de freshness a cada page load)
+1. **Sync automática** consulta a API do Mercado Pago (1x por cold start + verificação de freshness a cada page load: dispara se a última sync bem-sucedida tiver mais de 24 h)
 2. Novos dados são salvos no banco Supabase (duplicatas ignoradas via UNIQUE constraint)
 3. O frontend **sempre lê do banco**, nunca direto da API
 4. Dados históricos ficam permanentemente disponíveis sem necessidade de re-consultar a API
 
 ### Keep-alive (GitHub Action)
-O Streamlit Community Cloud hiberna o app após ~7 dias de inatividade. Uma GitHub Action (`.github/workflows/keep-alive.yml`) faz ping a cada **3 dias** para manter o app ativo. O cold start provocado pelo ping também dispara a sync automática, mantendo os dados frescos.
+O Streamlit Community Cloud hiberna o app após ~12 h sem tráfego, e o Supabase (free tier) pausa o projeto após ~7 dias sem atividade. A GitHub Action `.github/workflows/keep-alive.yml` roda **a cada 3 horas** (`17 */3 * * *`) com dois jobs independentes:
+
+1. **Ping Supabase** — `SELECT 1` direto no banco via SQLAlchemy, com o driver fixado em `postgresql+psycopg2` (a partir do SQLAlchemy 2.1, `postgresql://` passou a usar o `psycopg` v3 por padrão).
+2. **Acordar Streamlit** — abre o app em um navegador headless (Playwright) e:
+   - aguarda até 90 s por um estado conhecido: o botão *"Yes, get this app back up!"* (app hibernado) ou o container do app **dentro do iframe** `/~/+/` (app acordado);
+   - se hibernado, clica no botão e aguarda até 6 min pelo boot;
+   - confirma que o script do app renderizou a tela e mantém a sessão aberta por 45 s — é essa sessão que executa `main()` e, se os dados tiverem mais de 24 h, dispara a sincronização;
+   - **falha o job (exit 1)** se não conseguir confirmar o app acordado, gerando notificação de falha do GitHub. A captura de tela de cada execução fica disponível como artefato por 3 dias.
+
+> **Por que a cada 3 h:** o cron do GitHub Actions não é pontual — no histórico do projeto, as execuções atrasaram 2,5 h em mediana (até ~6 h) e algumas foram puladas. O minuto 17 evita o pico de carga da hora cheia.
+>
+> **Atenção:** em repositórios públicos, o GitHub **desativa workflows agendados após 60 dias sem commits**. Se o keep-alive parar, reative em *Actions → 🐺 Keep Alive + Sync → Enable workflow*.
 
 ---
 
@@ -290,9 +301,20 @@ Fluxo do sync job:
    c. Baixar CSV via GET /:file_name
    d. Parsear com pandas (filtra cartão de crédito e CASHBACK automaticamente)
    e. Inserir novos registros na tabela transactions (ON CONFLICT DO NOTHING)
-   f. Enriquecer transações com descrição via GET /v1/payments/:id
-6. Registrar no sync_log
+   f. Registrar no sync_log (logo após a inserção — antes do enriquecimento)
+   g. Enriquecer com descrição (GET /v1/payments/:id) APENAS as transações
+      inseridas nesta execução; falhas aqui não invalidam a sincronização
 ```
+
+> **Disparo e travas (v1.3.2):** a sincronização roda em uma thread de segundo plano
+> protegida por trava. Uma execução marcada como ativa há mais de **45 min** é considerada
+> travada e deixa de bloquear novas sincronizações. A espera pelo relatório usa prazo por
+> relógio real (`POLL_MAX_WAIT_SECONDS`), incluindo a duração de cada consulta à API.
+>
+> **Fuso horário (v1.3.2):** datetimes sem fuso (*naive*) são sempre UTC no projeto
+> (`config.settings.utcnow_naive()`); a conversão para Brasília ocorre apenas ao montar a
+> requisição à API (sufixo `-03:00`) e ao exibir. Na sincronização manual, as datas escolhidas
+> são interpretadas como dias do calendário de Brasília.
 
 > **Nota (v1.2.0):** O `begin_date` é propositalmente inclusivo (início do dia da última sync)
 > para garantir que transações realizadas no final do dia não sejam perdidas entre syncs.
@@ -720,7 +742,15 @@ JWT_SECRET = "chave-secreta-aleatoria"
 
 ## 16. Histórico de Versões (Changelog)
 
-### v1.3.1 (atual)
+### v1.3.2 (atual)
+**Confiabilidade do keep-alive e da sincronização** — diagnóstico feito a partir do histórico do GitHub Actions e do `sync_log`: o app ficava dias sem sincronizar mesmo com o keep-alive "verde".
+- **Wake do Streamlit corrigido:** o script consultava o botão de acordar com `isVisible()` logo após carregar a página — esse método não espera, então o botão (renderizado depois) nunca era encontrado e o app hibernado nunca era acordado. Agora aguarda o estado real, procura o container do app dentro do iframe `/~/+/`, confirma a renderização e **falha o job** quando o app não sobe (antes sempre reportava sucesso).
+- **Ping do Supabase corrigido:** falhava desde 24/09/2026 com `No module named 'psycopg'` (SQLAlchemy 2.1 mudou o driver padrão de `postgresql://`); driver fixado em `postgresql+psycopg2`.
+- **Cron a cada 3 h** (`17 */3 * * *`) para absorver os atrasos e as execuções puladas do agendador do GitHub; actions atualizadas para a v7 (Node 24) e runner fixado em `ubuntu-24.04`.
+- **Sync mais rápida e resiliente:** `sync_log` gravado antes do enriquecimento; enriquecimento só das transações novas (antes reconsultava centenas de transações sem descrição a cada execução, ~2,3 min por sync); prazo de espera do relatório por relógio real; trava de execução com expiração de 45 min.
+- **Fuso horário:** datas enviadas à API convertidas corretamente de UTC para Brasília (antes, o horário UTC era rotulado como `-03:00`); sincronização manual interpreta as datas no calendário de Brasília.
+
+### v1.3.1
 - **Auditoria de acessos:** nova aba admin 📊 com ranking de quem mais acessa, contagem de visitantes, série temporal (membros x visitantes) e últimos acessos. Alimentada pela tabela `access_log` (1 evento por sessão; sem IP).
 - **Splash screen do PWA no iOS:** integração do `pwacompat` (vendorado em `static/`) que gera as `apple-touch-startup-image` a partir do manifest — elimina a tela branca ao abrir o atalho no iPhone. No Android a splash já vinha do manifest.
 - **Caixa na virada do mês (gráfico da home):** o gráfico de barras agora empilha uma barra azul ("Caixa na virada") sobre a verde ("Entradas"), mostrando o caixa acumulado no início do mês ao lado das saídas. Elimina a distorção visual de parecer que houve dívida quando as saídas superam as entradas mas havia caixa acumulado. O saldo de abertura é calculado sobre todo o histórico via window function.

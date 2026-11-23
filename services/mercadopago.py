@@ -24,8 +24,28 @@ import pandas as pd
 import requests
 
 from config.settings import MercadoPago as MPConfig
+from config.settings import TZ_BRASILIA
 
 logger = logging.getLogger(__name__)
+
+
+def _to_brasilia(dt: datetime) -> datetime:
+    """
+    Converte um datetime para o fuso de Brasília (UTC-3).
+
+    Datetimes *naive* seguem a convenção do projeto e são tratados como UTC
+    (é assim que o servidor do Streamlit Cloud os produz e que o `sync_log`
+    os armazena). Antes desta conversão, o valor UTC era enviado à API com o
+    sufixo "-03:00" sem ajuste, deslocando a janela consultada em 3 horas.
+    """
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(TZ_BRASILIA)
+
+
+def _format_mp_datetime(dt: datetime) -> str:
+    """Formata um datetime no padrão esperado pela API (horário de Brasília)."""
+    return _to_brasilia(dt).strftime("%Y-%m-%dT%H:%M:%S-03:00")
 
 
 class MercadoPagoAPIError(Exception):
@@ -207,8 +227,8 @@ class MercadoPagoClient:
             Dict com dados do relatório solicitado (file_name, etc.).
         """
         payload = {
-            "begin_date": begin_date.strftime("%Y-%m-%dT%H:%M:%S-03:00"),
-            "end_date": end_date.strftime("%Y-%m-%dT%H:%M:%S-03:00"),
+            "begin_date": _format_mp_datetime(begin_date),
+            "end_date": _format_mp_datetime(end_date),
         }
         logger.info(f"Gerando relatório: {payload['begin_date']} → {payload['end_date']}")
         return self._request("POST", "", json=payload)
@@ -280,8 +300,9 @@ class MercadoPagoClient:
         Returns:
             O relatório mais recente que casa com o período, ou None.
         """
-        target_begin = begin_date.date()
-        target_end = end_date.date()
+        # As datas do relatório são comparadas em BRT (como o MP as normaliza)
+        target_begin = _to_brasilia(begin_date).date()
+        target_end = _to_brasilia(end_date).date()
         now_utc = datetime.now(timezone.utc)
 
         candidates: list[tuple[datetime, dict]] = []
@@ -339,14 +360,35 @@ class MercadoPagoClient:
         Returns:
             file_name quando pronto, ou None se timeout/error.
         """
-        elapsed = 0
         interval = MPConfig.POLL_INTERVAL_SECONDS
         max_wait = MPConfig.POLL_MAX_WAIT_SECONDS
 
         logger.info(f"Aguardando relatório id={report_id} (max {max_wait}s)...")
 
-        while elapsed < max_wait:
-            report = self.find_report_by_id(report_id)
+        # Prazo medido em tempo real (monotônico). Antes, o laço somava apenas
+        # o intervalo de espera e ignorava a duração de cada consulta — que,
+        # com retries e timeouts de 30 s, podia estender a espera por horas
+        # e manter a sincronização (e a trava `running`) presa.
+        start = time.monotonic()
+        deadline = start + max_wait
+
+        while time.monotonic() < deadline:
+            elapsed = int(time.monotonic() - start)
+            try:
+                report = self.find_report_by_id(report_id)
+            except MercadoPagoAPIError as e:
+                # Erros de cliente (credencial/permissão) não se resolvem
+                # esperando: propaga imediatamente.
+                if e.status_code in (400, 401, 403, 404):
+                    raise
+                # Falha transitória ao listar (timeout, 429, 5xx): tenta de
+                # novo até o prazo.
+                logger.warning(f"  [{elapsed}s] Falha ao consultar relatório id={report_id}: {e}")
+                report = None
+                if time.monotonic() + interval >= deadline:
+                    break
+                time.sleep(interval)
+                continue
 
             if report:
                 status = report.get("status", "unknown")
@@ -367,10 +409,14 @@ class MercadoPagoClient:
             else:
                 logger.warning(f"  [{elapsed}s] Relatório id={report_id} não encontrado na lista.")
 
+            if time.monotonic() + interval >= deadline:
+                break
             time.sleep(interval)
-            elapsed += interval
 
-        logger.error(f"Timeout: relatório não ficou pronto em {max_wait}s.")
+        logger.error(
+            f"Timeout: relatório não ficou pronto em {max_wait}s "
+            f"(tempo real decorrido: {int(time.monotonic() - start)}s)."
+        )
         return None
 
     # =============================================
