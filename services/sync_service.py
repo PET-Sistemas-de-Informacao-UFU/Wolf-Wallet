@@ -14,6 +14,7 @@ import logging
 from datetime import datetime, timedelta
 
 from config.settings import MercadoPago as MPConfig
+from config.settings import utcnow_naive
 from models.sync_log import create_log, get_last_successful_log
 from models.transaction import insert_transactions_batch
 from services.mercadopago import MercadoPagoAPIError, get_client
@@ -52,6 +53,8 @@ def sync_transactions(
         4. Parseia com pandas
         5. Insere novos registros no banco (ignora duplicatas)
         6. Registra no sync_log
+        7. Enriquece com descrição apenas as transações inseridas agora
+           (etapa opcional: falhas aqui não invalidam a sincronização)
 
     Args:
         begin_date: Início do período.
@@ -157,20 +160,29 @@ def sync_transactions(
                 "message": "Nenhuma transação nova no período.",
             }
 
-        # 6. Insere no banco
+        # 6. Insere no banco (guardando o maior id anterior para saber
+        #    quais transações foram inseridas nesta execução)
+        last_id_before = _get_max_transaction_id()
         _progress(f"💾 Inserindo {len(df)} transações no banco...")
         records_added = insert_transactions_batch(df)
 
-        # 7. Enriquece transações não-rendimento com descrição do pagamento
-        _enrich_new_transactions(client, _progress)
-
-        # 8. Registra no log
+        # 7. Registra no log ANTES do enriquecimento. Os dados já estão no
+        #    banco; se o enriquecimento demorar ou o processo for encerrado
+        #    (hibernação/reinício do Streamlit Cloud), a sincronização não se
+        #    perde e o critério de desatualização continua correto.
         create_log(
             records_added=records_added,
             status="success",
             begin_date=begin_date,
             end_date=end_date,
         )
+
+        # 8. Enriquece somente as transações novas (opcional, best-effort)
+        if records_added:
+            try:
+                _enrich_new_transactions(client, _progress, min_id=last_id_before)
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Enriquecimento ignorado após erro: {e}")
 
         message = f"Sincronização concluída: {records_added} novas transações inseridas."
         _progress(f"✅ {message}")
@@ -216,18 +228,31 @@ def sync_transactions(
 
 
 
+def _get_max_transaction_id() -> int:
+    """Retorna o maior id atual da tabela transactions (0 se vazia)."""
+    from config.database import execute_query
+
+    rows = execute_query("SELECT COALESCE(MAX(id), 0) AS max_id FROM transactions")
+    return int(rows[0]["max_id"]) if rows else 0
+
+
 def _enrich_new_transactions(
     client: "MercadoPagoClient",
     progress_callback: callable | None = None,
+    min_id: int = 0,
 ) -> int:
     """
-    Enriquece transações que ainda não têm payment_description.
+    Enriquece com descrição as transações inseridas nesta sincronização.
 
     Somente busca para transações que NÃO são rendimento/imposto CDI:
     - Tem payment_method preenchido (pix, available_money, etc.)
     - OU valor absoluto >= threshold
 
-    Isso evita chamadas desnecessárias para os ~90% de rendimentos.
+    Considera apenas transações com id > min_id (as recém-inseridas).
+    Antes, toda sincronização reconsultava TODAS as transações sem
+    descrição — inclusive centenas para as quais a API nunca retorna
+    descrição —, acrescentando minutos e centenas de chamadas à API a
+    cada execução.
     """
     from config.database import execute_query, execute_update
     from config.settings import Finance
@@ -238,11 +263,12 @@ def _enrich_new_transactions(
     rows = execute_query(
         "SELECT DISTINCT source_id FROM transactions "
         "WHERE payment_description IS NULL "
+        "AND id > :min_id "
         "AND ("
         "  (payment_method IS NOT NULL AND payment_method != '') "
         "  OR ABS(transaction_amount) >= :threshold"
         ")",
-        {"threshold": threshold},
+        {"threshold": threshold, "min_id": min_id},
     )
 
     if not rows:
@@ -303,16 +329,20 @@ def run_daily_sync(progress_callback: callable | None = None) -> dict:
     # Determina begin_date (início do dia da última sync, para ser inclusivo)
     last_sync = get_last_sync_date()
     if last_sync:
-        # Volta ao 00:00:00 do dia da última sync para recapturar
-        # transações tardias que podem não ter entrado no relatório anterior
+        # Volta ao 00:00:00 (UTC) do dia da última sync para recapturar
+        # transações tardias que podem não ter entrado no relatório anterior.
+        # Em BRT isso corresponde às 21h do dia anterior: a sobreposição com
+        # a janela anterior é de pelo menos 3 h, sem risco de duplicatas
+        # (carga idempotente).
         begin_date = last_sync.replace(hour=0, minute=0, second=0, microsecond=0)
     else:
         # Primeira sync: 6 meses atrás
-        begin_date = datetime.now() - timedelta(days=180)
+        begin_date = utcnow_naive() - timedelta(days=180)
         begin_date = begin_date.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    # end_date: momento atual (captura o dia de hoje)
-    end_date = datetime.now().replace(second=0, microsecond=0)
+    # end_date: momento atual em UTC (convenção do projeto para datetimes
+    # naive; a conversão para BRT ocorre ao montar a requisição à API)
+    end_date = utcnow_naive().replace(second=0, microsecond=0)
 
     if begin_date >= end_date:
         return {

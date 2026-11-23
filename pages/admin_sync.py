@@ -13,13 +13,13 @@ Usage:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import streamlit as st
 
 from auth.session import require_admin
 from components.sync_status import render_sync_banner
-from config.settings import Colors, to_brasilia
+from config.settings import TZ_BRASILIA, Colors, to_brasilia
 
 
 def render_admin_sync() -> None:
@@ -155,8 +155,13 @@ def _render_manual_sync() -> None:
                 key="sync_end",
             )
 
-        begin_date = datetime.combine(begin_date_input, datetime.min.time())
-        end_date = datetime.combine(end_date_input, datetime.max.time().replace(microsecond=0))
+        # As datas escolhidas são dias do calendário de Brasília. Convertidas
+        # para UTC naive (convenção do projeto), são enviadas à API já no
+        # fuso correto e exibidas corretamente no histórico.
+        begin_date = _brt_to_utc_naive(datetime.combine(begin_date_input, datetime.min.time()))
+        end_date = _brt_to_utc_naive(
+            datetime.combine(end_date_input, datetime.max.time().replace(microsecond=0))
+        )
 
         # Feedback do período selecionado
         days_selected = (end_date - begin_date).days
@@ -175,6 +180,11 @@ def _render_manual_sync() -> None:
     # Botão de sync
     if st.button("🔄 Iniciar Sincronização", type="primary", width="stretch"):
         _execute_sync(begin_date, end_date)
+
+
+def _brt_to_utc_naive(dt: datetime) -> datetime:
+    """Interpreta um datetime naive como horário de Brasília e o converte para UTC naive."""
+    return dt.replace(tzinfo=TZ_BRASILIA).astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def _execute_sync(begin_date: datetime | None, end_date: datetime | None) -> None:
@@ -197,18 +207,13 @@ def _execute_sync(begin_date: datetime | None, end_date: datetime | None) -> Non
         except Exception:
             pass
 
+    run_id = None
     try:
         from services.sync_service import run_daily_sync, sync_custom_period
-        from services.auto_sync import _update_progress
+        from services.auto_sync import mark_sync_finished, mark_sync_started
 
         # Marca início no progresso global
-        _update_progress(
-            running=True,
-            steps=["🚀 Sincronização manual iniciada..."],
-            started_at=datetime.now(),
-            finished_at=None,
-            result=None,
-        )
+        run_id = mark_sync_started("🚀 Sincronização manual iniciada...")
 
         with st.spinner("Sincronizando..."):
             if begin_date and end_date:
@@ -217,11 +222,7 @@ def _execute_sync(begin_date: datetime | None, end_date: datetime | None) -> Non
                 result = run_daily_sync(progress_callback)
 
         # Marca fim no progresso global
-        _update_progress(
-            running=False,
-            finished_at=datetime.now(),
-            result=result,
-        )
+        mark_sync_finished(run_id, result)
 
         if result["status"] == "success":
             status_container.success(f"✅ {result['message']}")
@@ -230,12 +231,12 @@ def _execute_sync(begin_date: datetime | None, end_date: datetime | None) -> Non
 
     except Exception as e:
         try:
-            from services.auto_sync import _update_progress
-            _update_progress(
-                running=False,
-                finished_at=datetime.now(),
-                result={"status": "error", "records_added": 0, "message": str(e)},
-            )
+            from services.auto_sync import mark_sync_finished
+            if run_id is not None:
+                mark_sync_finished(
+                    run_id,
+                    {"status": "error", "records_added": 0, "message": str(e)},
+                )
         except Exception:
             pass
         status_container.error(f"❌ Erro inesperado: {e}")

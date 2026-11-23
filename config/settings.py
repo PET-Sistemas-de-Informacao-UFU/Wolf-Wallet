@@ -24,6 +24,18 @@ def now_brasilia() -> datetime:
     return datetime.now(TZ_BRASILIA)
 
 
+def utcnow_naive() -> datetime:
+    """
+    Retorna o instante atual em UTC, sem tzinfo.
+
+    Convenção do projeto: datetimes *naive* persistidos (sync_log, transações)
+    representam UTC — é o que `to_brasilia()` assume ao exibir. Usar esta
+    função em vez de `datetime.now()` garante a convenção mesmo quando o
+    processo não roda em UTC (ex.: desenvolvimento local em BRT).
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 def to_brasilia(dt: datetime) -> datetime:
     """Converte um datetime para o fuso horário de Brasília."""
     if dt is None:
@@ -43,7 +55,7 @@ class App:
     NAME: str = "Wolf Wallet"
     EMOJI: str = "🐺"
     TITLE: str = f"{NAME}"
-    VERSION: str = "1.3.1"
+    VERSION: str = "1.3.2"
     DESCRIPTION: str = (
         "Carteira virtual do PET-SI — UFU. "
         "Visualize as movimentações financeiras da conta compartilhada "
